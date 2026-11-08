@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Boreas logo concept "Kutup Işığı" (aurora + frosted three-blade fan). Approved concept, not final artwork. -->
+  <defs>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#050b1f"/><stop offset=".55" stop-color="#0d1a3a"/><stop offset="1" stop-color="#1a1240"/>
+    </linearGradient>
+    <linearGradient id="aur1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2cffb0" stop-opacity="0"/><stop offset=".35" stop-color="#2cffb0" stop-opacity=".85"/><stop offset=".7" stop-color="#29c9ff" stop-opacity=".7"/><stop offset="1" stop-color="#a45cff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="aur2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a45cff" stop-opacity="0"/><stop offset=".5" stop-color="#a45cff" stop-opacity=".7"/><stop offset="1" stop-color="#ff5cc8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="blur40"><feGaussianBlur stdDeviation="40"/></filter>
+    <filter id="blur18"><feGaussianBlur stdDeviation="18"/></filter>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset="1" stop-color="#cfe9ff" stop-opacity=".55"/>
+    </linearGradient>
+    <path id="blade" d="M512 512 C 430 450, 400 290, 500 190 C 570 125, 690 160, 690 250 C 690 360, 590 450, 512 512 Z"/>
+  </defs>
+  <g clip-path="url(#sq)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <g filter="url(#blur40)">
+      <path d="M60 360 C 260 220, 520 420, 980 230 L 980 340 C 560 520, 280 330, 60 470 Z" fill="url(#aur1)"/>
+      <path d="M60 520 C 300 420, 600 600, 980 420 L 980 500 C 620 680, 320 500, 60 610 Z" fill="url(#aur2)"/>
+    </g>
+    <g fill="#fff">
+      <circle cx="220" cy="210" r="5"/><circle cx="790" cy="170" r="4"/><circle cx="860" cy="330" r="3"/><circle cx="170" cy="760" r="3"/><circle cx="640" cy="140" r="3"/>
+    </g>
+    <g filter="url(#blur18)" opacity=".55">
+      <use href="#blade" fill="#29c9ff"/><use href="#blade" fill="#29c9ff" transform="rotate(120 512 512)"/><use href="#blade" fill="#29c9ff" transform="rotate(240 512 512)"/>
+    </g>
+    <use href="#blade" fill="url(#glass)"/>
+    <use href="#blade" fill="url(#glass)" transform="rotate(120 512 512)"/>
+    <use href="#blade" fill="url(#glass)" transform="rotate(240 512 512)"/>
+    <circle cx="512" cy="512" r="58" fill="#0d1a3a"/>
+    <circle cx="512" cy="512" r="58" fill="none" stroke="#fff" stroke-width="8" stroke-opacity=".8"/>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="6"/>
+  </g>
+</svg>
