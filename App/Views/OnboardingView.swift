@@ -1,12 +1,32 @@
+import AppKit
+import BoreasCore
 import SwiftUI
 
 /// Shown in the main window while the helper is not registered or awaits approval, on Macs with
 /// fans only.
 struct OnboardingView: View {
     let model: AppModel
+    /// The helper just became enabled: confirmation shown for a moment before the main window.
+    var ready = false
     @State private var working = false
 
     var body: some View {
+        if ready {
+            VStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(.green)
+                Text("Ready — fan control is on")
+                    .font(.title2.weight(.semibold))
+            }
+            .padding(32)
+            .frame(width: 440)
+        } else {
+            setup
+        }
+    }
+
+    private var setup: some View {
         VStack(spacing: 16) {
             Image(systemName: "fan")
                 .font(.system(size: 44, weight: .light))
@@ -32,6 +52,16 @@ struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
             default:
+                if !AppInstallLocation.isInApplications(Bundle.main.bundleURL) {
+                    VStack(spacing: 6) {
+                        Label("Move Boreas to the Applications folder first", systemImage: "folder")
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                        }
+                    }
+                }
                 Button {
                     working = true
                     Task {

@@ -24,6 +24,11 @@ public struct HelperConfiguration: Codable, Equatable, Sendable {
     }
 }
 
+/// Version of the app-helper XPC payload format. Bump it when `HelperSnapshot` or
+/// `HelperConfiguration` change in a way an older peer cannot read; the app re-registers a helper
+/// whose snapshot reports a different value.
+public let boreasXPCFormatVersion = 1
+
 /// What the helper reports back to the app.
 public struct HelperSnapshot: Codable, Equatable, Sendable {
     public var fans: [FanInfo]
@@ -32,13 +37,30 @@ public struct HelperSnapshot: Codable, Equatable, Sendable {
     public var commands: [Int: String]
     public var ceilingTripped: Bool
     public var helperVersion: String
+    /// `boreasXPCFormatVersion` of the helper; 0 for a helper that predates the field.
+    public var formatVersion: Int
 
     public init(fans: [FanInfo], sensors: [SensorReading], commands: [Int: String],
-                ceilingTripped: Bool, helperVersion: String) {
+                ceilingTripped: Bool, helperVersion: String, formatVersion: Int = boreasXPCFormatVersion) {
+        self.formatVersion = formatVersion
         self.fans = fans
         self.sensors = sensors
         self.commands = commands
         self.ceilingTripped = ceilingTripped
         self.helperVersion = helperVersion
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case fans, sensors, commands, ceilingTripped, helperVersion, formatVersion
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        fans = try c.decode([FanInfo].self, forKey: .fans)
+        sensors = try c.decode([SensorReading].self, forKey: .sensors)
+        commands = try c.decode([Int: String].self, forKey: .commands)
+        ceilingTripped = try c.decode(Bool.self, forKey: .ceilingTripped)
+        helperVersion = try c.decode(String.self, forKey: .helperVersion)
+        formatVersion = try c.decodeIfPresent(Int.self, forKey: .formatVersion) ?? 0
     }
 }

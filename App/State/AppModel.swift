@@ -50,6 +50,9 @@ final class AppModel {
     @ObservationIgnored private var quitting = false
     /// Set when `register()` failed because the daemon plist or executable is missing.
     @ObservationIgnored private var registrationMissing = false
+    /// The first-launch welcome window opens once per run (MenuBarLabel).
+    @ObservationIgnored var welcomeShown = false
+    @ObservationIgnored private let approvalGuide = ApprovalGuidePanel()
 
     static let statusCheckInterval: Duration = .seconds(3)
 
@@ -120,8 +123,30 @@ final class AppModel {
         if helperStatus == .requiresApproval || helperStatus == .enabled { installError = nil }
     }
 
+    /// Opens Login Items and floats a small guide next to it until the helper is enabled.
     func openSystemSettings() {
         installer.openSystemSettings()
+        approvalGuide.show()
+    }
+
+    // Sensor display preferences (they only change what the app shows).
+
+    func toggleStar(_ id: SensorID) {
+        if settings.sensorPrefs.starred.contains(id) {
+            settings.sensorPrefs.starred.remove(id)
+        } else {
+            settings.sensorPrefs.starred.insert(id)
+        }
+    }
+
+    func setHidden(_ id: SensorID, _ hidden: Bool) {
+        if hidden { settings.sensorPrefs.hidden.insert(id) } else { settings.sensorPrefs.hidden.remove(id) }
+    }
+
+    /// An empty name removes the rename.
+    func rename(_ id: SensorID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.sensorPrefs.renamed[id] = trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Loop
@@ -141,6 +166,7 @@ final class AppModel {
     /// Fans back to Apple (2 s timeout, failure ignored), then the connection is closed.
     func prepareToQuit() async {
         quitting = true
+        approvalGuide.close()
         loop?.cancel()
         loop = nil
         // Let an in-flight configuration send finish so it cannot land after the reset.
@@ -168,7 +194,7 @@ final class AppModel {
                 if quitting { return }
                 helperError = nil
                 record(s)
-                await checkVersion(s.helperVersion)
+                await checkVersion(s.helperVersion, formatVersion: s.formatVersion)
                 return
             } catch {
                 log.error("snapshot failed: \(String(describing: error), privacy: .public)")
@@ -221,6 +247,7 @@ final class AppModel {
         if new != helperStatus {
             log.info("helper status: \(String(describing: new), privacy: .public)")
             helperStatus = new
+            if new == .enabled { approvalGuide.close() }
             if new != .enabled {
                 client.invalidate()
                 sentGeneration = nil
@@ -250,13 +277,14 @@ final class AppModel {
         }
     }
 
-    /// Once per launch: a helper from another app version is unregistered and registered again.
-    private func checkVersion(_ helperVersion: String) async {
+    /// Once per launch: a helper from another app version, or speaking another XPC format, is
+    /// unregistered and registered again.
+    private func checkVersion(_ helperVersion: String, formatVersion: Int) async {
         guard !versionChecked else { return }
         versionChecked = true
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-        guard helperVersion != appVersion else { return }
-        log.notice("helper \(helperVersion, privacy: .public) != app \(appVersion, privacy: .public), re-registering")
+        guard helperVersion != appVersion || formatVersion != boreasXPCFormatVersion else { return }
+        log.notice("helper \(helperVersion, privacy: .public) (format \(formatVersion)) != app \(appVersion, privacy: .public) (format \(boreasXPCFormatVersion)), re-registering")
         client.invalidate()
         sentGeneration = nil
         do {

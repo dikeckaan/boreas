@@ -6,6 +6,7 @@ import SwiftUI
 
 struct MenuBarLabel: View {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 4) {
@@ -14,6 +15,13 @@ struct MenuBarLabel: View {
             if let text = model.menuBarText {
                 Text(text).monospacedDigit()
             }
+        }
+        // First launch (spec §6.1): the window opens by itself, once per run, when onboarding is needed.
+        .onChange(of: model.needsOnboarding, initial: true) { _, needed in
+            guard needed, !model.welcomeShown else { return }
+            model.welcomeShown = true
+            openWindow(id: "main")
+            NSApp.activate()
         }
     }
 }

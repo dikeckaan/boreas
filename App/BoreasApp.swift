@@ -16,7 +16,7 @@ struct BoreasApp: App {
         Window("Boreas", id: "main") {
             MainWindowContent(model: appDelegate.model)
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
     }
 }
@@ -40,30 +40,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
-    }
-}
-
-/// Main window until Task 8: onboarding while the helper is not enabled (install, approval or
-/// missing), otherwise a placeholder.
-private struct MainWindowContent: View {
-    let model: AppModel
-
-    var body: some View {
-        if model.needsOnboarding {
-            OnboardingView(model: model)
-        } else {
-            VStack(spacing: 10) {
-                Image(systemName: "fan")
-                    .font(.system(size: 36, weight: .light))
-                    .foregroundStyle(.secondary)
-                Text("Boreas").font(.title2.weight(.semibold))
-                Text("The full window is coming soon. Use the menu bar to pick a profile.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(32)
-            .frame(width: 440)
-        }
     }
 }

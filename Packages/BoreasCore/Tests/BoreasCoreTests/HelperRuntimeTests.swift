@@ -426,3 +426,17 @@ private func running() -> Rig {
     other.connectionEnded()
     #expect(r.rt.clientCount == 1)
 }
+
+@Test func snapshotCarriesXPCFormatVersion() {
+    #expect(boreasXPCFormatVersion == 1)
+    #expect(running().rt.snapshot().formatVersion == boreasXPCFormatVersion)
+}
+
+@Test func snapshotFromOlderHelperDecodesWithFormatVersionZero() throws {
+    let s = running().rt.snapshot()
+    var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
+    json.removeValue(forKey: "formatVersion")
+    let old = try JSONDecoder().decode(HelperSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(old.formatVersion == 0)
+    #expect(old.fans == s.fans)
+}

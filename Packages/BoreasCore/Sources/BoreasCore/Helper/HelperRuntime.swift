@@ -127,7 +127,8 @@ public final class HelperRuntime: @unchecked Sendable {
         }
         for fan in unverifiedFans { commands[fan] = "unverified" }
         return HelperSnapshot(fans: (try? fanController.fans()) ?? [], sensors: readings, commands: commands,
-                              ceilingTripped: engine.ceiling.tripped, helperVersion: helperVersion)
+                              ceilingTripped: engine.ceiling.tripped, helperVersion: helperVersion,
+                              formatVersion: boreasXPCFormatVersion)
     }
 
     // MARK: - Internals
