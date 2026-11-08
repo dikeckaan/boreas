@@ -40,6 +40,17 @@ let smc: IOKitSMCClient
 do { smc = try IOKitSMCClient() } catch { fail("SMC açılamadı: \(error)") }
 let fc = FanController(smc: smc)
 
+/// Restores auto mode with read-back; retries once, then warns loudly. Returns true if verified.
+@discardableResult
+func restoreAuto(alsoFans: [Int] = []) -> Bool {
+    var left = fc.setAllAuto(alsoFans: alsoFans)
+    if !left.isEmpty { left = fc.setAllAuto(alsoFans: Array(Set(left + alsoFans))) }
+    if !left.isEmpty {
+        FileHandle.standardError.write(Data("UYARI: fan \(left.map(String.init).joined(separator: ", ")) Otomatik'e alınamadı veya doğrulanamadı! Macs Fan Control veya yeniden başlatma ile geri alın.\n".utf8))
+    }
+    return left.isEmpty
+}
+
 do {
     switch command {
     case .fans:
@@ -51,32 +62,33 @@ do {
             print("\(k)  \(v.type)  \(shown)")
         }
     case .auto:
-        fc.setAllAuto()
+        let ok = restoreAuto()
         try printFans(fc)
+        if !ok { exit(1) }
     case .set(let fan, let rpm, let hold):
         // Restore auto mode before dying on SIGINT/SIGTERM.
         var sources: [DispatchSourceSignal] = []
-        for sig in [SIGINT, SIGTERM] {
+        for sig in [SIGINT, SIGTERM, SIGHUP, SIGQUIT] {
             signal(sig, SIG_IGN)
             let s = DispatchSource.makeSignalSource(signal: sig, queue: .main)
             s.setEventHandler {
-                fc.setAllAuto()
-                exit(130)
+                restoreAuto(alsoFans: [fan])
+                exit(128 + sig)
             }
             s.resume()
             sources.append(s)
         }
         do { try fc.setManual(fan: fan, rpm: rpm) }
-        catch { fc.setAllAuto(); fail("elle moda alınamadı: \(error)") }
+        catch { restoreAuto(alsoFans: [fan]); fail("elle moda alınamadı: \(error)") }
         var remaining = hold
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: 1.0)
         timer.setEventHandler {
             try? printFans(fc)
             if remaining <= 0 {
-                fc.setAllAuto()
+                let ok = restoreAuto(alsoFans: [fan])
                 try? printFans(fc)
-                exit(0)
+                exit(ok ? 0 : 1)
             }
             remaining -= 1
         }

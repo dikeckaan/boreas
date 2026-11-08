@@ -61,12 +61,20 @@ public final class FanController: @unchecked Sendable {
         try clearUnlockIfNoManualFans()
     }
 
-    /// Never throws: tries every fan, swallows per-fan errors, then clears Ftst if present.
-    public func setAllAuto() {
-        for i in 0..<fanCount {
+    /// Never throws. Tries every fan (plus `alsoFans`, even if FNum is unreadable), swallows
+    /// per-fan errors, writes Ftst=0 unconditionally when the key exists, then reads back.
+    /// Returns the fan indices still manual or unverifiable.
+    @discardableResult
+    public func setAllAuto(alsoFans: [Int] = []) -> [Int] {
+        let indices = Set(0..<fanCount).union(alsoFans).sorted()
+        for i in indices {
             if let mode = try? modeKey(for: i) { try? smc.write(mode, bytes: [0]) }
         }
-        try? clearUnlockIfNoManualFans()
+        if (try? smc.read(Self.unlockKey)) != nil { try? smc.write(Self.unlockKey, bytes: [0]) }
+        return indices.filter { i in
+            guard let mode = try? modeKey(for: i), let v = try? smc.read(mode).doubleValue else { return true }
+            return v != 0
+        }
     }
 
     private func clearUnlockIfNoManualFans() throws {

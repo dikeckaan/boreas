@@ -5,6 +5,7 @@ public final class FakeSMCClient: SMCClient, @unchecked Sendable {
     private var _values: [FourCC: SMCValue]
     private var _writes: [(FourCC, [UInt8])] = []
     private var _failWrites = false
+    private var _failWritesFor: Set<FourCC> = []
 
     public init(values: [FourCC: SMCValue]) { _values = values }
 
@@ -13,6 +14,11 @@ public final class FakeSMCClient: SMCClient, @unchecked Sendable {
     public var failWrites: Bool {
         get { lock.withLock { _failWrites } }
         set { lock.withLock { _failWrites = newValue } }
+    }
+
+    public var failWritesFor: Set<FourCC> {
+        get { lock.withLock { _failWritesFor } }
+        set { lock.withLock { _failWritesFor = newValue } }
     }
 
     public func read(_ key: FourCC) throws -> SMCValue {
@@ -24,7 +30,7 @@ public final class FakeSMCClient: SMCClient, @unchecked Sendable {
 
     public func write(_ key: FourCC, bytes: [UInt8]) throws {
         try lock.withLock {
-            if _failWrites { throw SMCError.ioFailure(-1) }
+            if _failWrites || _failWritesFor.contains(key) { throw SMCError.ioFailure(-1) }
             _writes.append((key, bytes))
             let type = _values[key]?.type ?? (bytes.count == 4 ? "flt " : "ui8 ")
             _values[key] = SMCValue(key: key, type: type, bytes: bytes)

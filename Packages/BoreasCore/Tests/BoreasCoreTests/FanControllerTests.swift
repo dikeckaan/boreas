@@ -38,9 +38,22 @@ private func fake(modeKey: FourCC = "F0md", extra: [FourCC: SMCValue] = [:]) -> 
   try FanController(smc: s).setAuto(fan: 0)
   #expect(s.writes.map(\.0) == ["F0md"]) }
 @Test func setAllAutoSwallowsErrorsAndStillClearsFtst() throws {
-  let s = fake(extra: ["Ftst": .ui8(1)]); s.failWrites = true
-  FanController(smc: s).setAllAuto()   // must not throw/crash
-  #expect(s.writes.isEmpty) }
+  let s = fake(extra: ["Ftst": .ui8(1), "F0md": .ui8(1)]); s.failWritesFor = ["F0md"]
+  let left = FanController(smc: s).setAllAuto()   // must not throw/crash
+  #expect(s.writes.map(\.0) == ["Ftst"]); #expect(s.writes[0].1 == [0])
+  #expect(left == [0]) }
+@Test func setAllAutoClearsFtstEvenWhenAnotherFanIsManual() throws {
+  let s = fake(extra: ["FNum": .ui8(2), "F1Ac": .flt(1), "F1Mn": .flt(1), "F1Mx": .flt(2), "F1Tg": .flt(1), "F1md": .ui8(1), "Ftst": .ui8(1)])
+  s.failWritesFor = ["F1md"]
+  let left = FanController(smc: s).setAllAuto()
+  #expect(s.writes.map(\.0) == ["F0md", "Ftst"]); #expect(left == [1]) }
+@Test func setAllAutoRestoresAlsoFansWhenFNumUnreadable() throws {
+  let s = FakeSMCClient(values: ["F0md": .ui8(1), "Ftst": .ui8(1)])
+  let left = FanController(smc: s).setAllAuto(alsoFans: [0])
+  #expect(s.writes.map(\.0) == ["F0md", "Ftst"]); #expect(left.isEmpty) }
+@Test func setAllAutoReturnsFanWhoseModeWriteFails() throws {
+  let s = fake(extra: ["F0md": .ui8(1)]); s.failWritesFor = ["F0md"]
+  #expect(FanController(smc: s).setAllAuto() == [0]) }
 @Test func setAllAutoWritesEveryFan() throws {
   let s = fake(extra: ["Ftst": .ui8(1)]); FanController(smc: s).setAllAuto()
   #expect(s.writes.map(\.0) == ["F0md", "Ftst"]) }

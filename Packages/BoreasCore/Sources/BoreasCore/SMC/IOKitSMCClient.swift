@@ -28,7 +28,8 @@ public final class IOKitSMCClient: SMCClient, @unchecked Sendable {
         if r == kIOReturnNotPrivileged { throw SMCError.notPrivileged }
         guard r == kIOReturnSuccess else { throw SMCError.ioFailure(r) }
         if out.result != 0 {
-            if let key { throw SMCError.notFound(key) }
+            // 0x84 = key not found; anything else is a real failure and must not be masked.
+            if out.result == 0x84, let key { throw SMCError.notFound(key) }
             throw SMCError.ioFailure(Int32(out.result))
         }
         return out
