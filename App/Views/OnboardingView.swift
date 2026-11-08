@@ -19,6 +19,11 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
 
             switch model.helperStatus {
+            case .unavailable:
+                // Only after register() reported the plist or executable missing; the error follows below.
+                Text("The helper service is missing from the app. Reinstall Boreas to control fans.")
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             case .requiresApproval:
                 Text("Allow Boreas under System Settings › General › Login Items & Extensions.")
                     .multilineTextAlignment(.center)

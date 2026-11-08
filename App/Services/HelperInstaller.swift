@@ -1,14 +1,7 @@
 import AppKit
+import BoreasCore
 import Foundation
 import ServiceManagement
-
-enum HelperStatus: Equatable, Sendable {
-    case notRegistered
-    case requiresApproval
-    case enabled
-    /// The daemon plist is not in the app bundle (`SMAppService.Status.notFound`).
-    case unavailable
-}
 
 /// Registers BoreasHelper with `SMAppService`. Calls run off the main actor: they talk to
 /// launchd and may take a moment.
@@ -17,15 +10,11 @@ struct HelperInstaller: Sendable {
 
     private static var service: SMAppService { .daemon(plistName: plistName) }
 
-    func status() async -> HelperStatus {
+    /// `registrationMissing`: an earlier `register()` failed because the plist or executable is
+    /// absent. See `HelperStatus.resolve` (`.notFound` alone still offers Install).
+    func status(registrationMissing: Bool) async -> HelperStatus {
         await Task.detached(priority: .utility) {
-            switch Self.service.status {
-            case .notRegistered: HelperStatus.notRegistered
-            case .requiresApproval: .requiresApproval
-            case .enabled: .enabled
-            case .notFound: .unavailable
-            @unknown default: .unavailable
-            }
+            HelperStatus.resolve(Self.service.status, registrationMissing: registrationMissing)
         }.value
     }
 

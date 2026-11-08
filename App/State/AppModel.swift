@@ -48,6 +48,8 @@ final class AppModel {
     @ObservationIgnored private var syncing = false
     @ObservationIgnored private var versionChecked = false
     @ObservationIgnored private var quitting = false
+    /// Set when `register()` failed because the daemon plist or executable is missing.
+    @ObservationIgnored private var registrationMissing = false
 
     static let statusCheckInterval: Duration = .seconds(3)
 
@@ -77,8 +79,9 @@ final class AppModel {
     var canControlFans: Bool { hasFans && helperStatus == .enabled }
     /// What to tell the user about the helper, if anything is wrong.
     var helperProblem: String? { helperError ?? configurationError }
+    /// Onboarding covers install, approval and the "missing from the app" failure.
     var needsOnboarding: Bool {
-        hasFans && (helperStatus == .notRegistered || helperStatus == .requiresApproval)
+        hasFans && helperStatus != .enabled
     }
 
     func mode(of fan: Int) -> FanMode { settings.fanModes[fan] ?? .auto }
@@ -106,9 +109,11 @@ final class AppModel {
         installError = nil
         do {
             try await installer.register()
+            registrationMissing = false
         } catch {
             log.error("register failed: \(String(describing: error), privacy: .public)")
             installError = error.localizedDescription
+            if HelperStatus.isMissingRegistrationError(error) { registrationMissing = true }
         }
         await refreshStatus()
         // Registration that only awaits approval is not an error for the user.
@@ -212,7 +217,7 @@ final class AppModel {
 
     private func refreshStatus() async {
         lastStatusCheck = ContinuousClock.now
-        let new = await installer.status()
+        let new = await installer.status(registrationMissing: registrationMissing)
         if new != helperStatus {
             log.info("helper status: \(String(describing: new), privacy: .public)")
             helperStatus = new
@@ -260,6 +265,10 @@ final class AppModel {
         } catch {
             log.error("re-register failed: \(String(describing: error), privacy: .public)")
             helperError = error.localizedDescription
+            if HelperStatus.isMissingRegistrationError(error) {
+                registrationMissing = true
+                installError = error.localizedDescription
+            }
         }
         await refreshStatus()
     }

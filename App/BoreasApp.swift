@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Main window until Task 8: onboarding while the helper needs setting up, otherwise a placeholder.
+/// Main window until Task 8: onboarding while the helper is not enabled (install, approval or
+/// missing), otherwise a placeholder.
 private struct MainWindowContent: View {
     let model: AppModel
 
@@ -56,16 +57,10 @@ private struct MainWindowContent: View {
                     .font(.system(size: 36, weight: .light))
                     .foregroundStyle(.secondary)
                 Text("Boreas").font(.title2.weight(.semibold))
-                Group {
-                    if model.helperStatus == .unavailable, model.hasFans {
-                        Text("The helper service is missing from the app. Reinstall Boreas to control fans.")
-                    } else {
-                        Text("The full window is coming soon. Use the menu bar to pick a profile.")
-                    }
-                }
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text("The full window is coming soon. Use the menu bar to pick a profile.")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(32)
             .frame(width: 440)
