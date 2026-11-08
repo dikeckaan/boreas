@@ -59,6 +59,12 @@ struct SettingsView: View {
                 if let error = model.installError {
                     Text(error).font(.caption).foregroundStyle(.orange)
                 }
+                if model.removeNeedsForce {
+                    Text("The fans could not be handed back to macOS. Remove the service anyway; macOS resets the fans when it stops.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Remove Anyway", role: .destructive) { run { await model.removeHelper(force: true) } }
+                        .disabled(working || AppModel.localOnly)
+                }
                 HStack {
                     Button("Reinstall") { run { await model.reinstallHelper() } }
                     Button("Remove", role: .destructive) { confirmRemove = true }

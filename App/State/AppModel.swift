@@ -31,8 +31,10 @@ final class AppModel {
     private(set) var helperError: String?
     /// Last configuration the helper refused or did not receive, nil once one is accepted.
     private(set) var configurationError: String?
-    /// Error from the last install attempt, shown by the onboarding view.
+    /// Error from the last install attempt, shown by the onboarding view and Settings.
     private(set) var installError: String?
+    /// The last Remove stopped because the fans could not be reset; Settings offers "Remove Anyway".
+    private(set) var removeNeedsForce = false
     /// Number of fans, nil until the first reading.
     private(set) var fanCount: Int?
 
@@ -46,6 +48,9 @@ final class AppModel {
     @ObservationIgnored private var sentGeneration: UInt64?
     @ObservationIgnored private var sentConfiguration: HelperConfiguration?
     @ObservationIgnored private var syncing = false
+    /// Gate for helper traffic: blocked during Remove/Reinstall, and for a new connection until it
+    /// has answered a snapshot and passed the version check.
+    @ObservationIgnored private let lifecycle = HelperLifecycle()
     @ObservationIgnored private var versionChecked = false
     @ObservationIgnored private var quitting = false
     /// Set when `register()` failed because the daemon plist or executable is missing.
@@ -78,9 +83,11 @@ final class AppModel {
     /// Launch at login is on by default, set up once. After that the user's choice (System Settings
     /// or the Settings window) is left alone. Debug local-only runs never touch it.
     private func setUpLoginItemOnFirstLaunch() {
-        guard !Self.localOnly, !settings.didInitialLoginItemSetup else { return }
+        guard LoginItemPolicy.shouldRegisterOnThisLaunch(didInitialSetup: settings.didInitialLoginItemSetup,
+                                                         localOnly: Self.localOnly) else { return }
         LoginItem.performInitialSetup()
         settings.didInitialLoginItemSetup = true
+        persist()   // explicit: do not rely on didSet alone for "never register again"
     }
 
     static func defaultStore() -> SettingsStore {
@@ -138,38 +145,58 @@ final class AppModel {
     }
 
     /// Fans back to Apple first, then the helper is unregistered. If the reset fails the helper
-    /// stays registered and the error is shown.
-    func removeHelper() async {
-        guard !Self.localOnly else { return }
+    /// stays registered, the error is shown and `removeNeedsForce` is set; `force` (Remove Anyway)
+    /// unregisters regardless.
+    func removeHelper(force: Bool = false) async {
+        guard !Self.localOnly, !lifecycle.removing else { return }
         installError = nil
-        if helperStatus == .enabled {
-            do {
-                try await client.resetAllToAuto()
-            } catch {
-                log.error("resetAllToAuto before removal failed: \(String(describing: error), privacy: .public)")
-                installError = error.localizedDescription
-                return
-            }
-        }
-        client.invalidate()
-        sentGeneration = nil
-        if helperStatus != .notRegistered {
-            do {
-                try await installer.unregister()
-                registrationMissing = false
-            } catch {
-                log.error("unregister failed: \(String(describing: error), privacy: .public)")
-                installError = error.localizedDescription
-            }
-        }
-        await refreshStatus()
+        removeNeedsForce = false
+        let ok = await tearDownHelper(force: force)
+        if ok { await refreshStatus() }
+        lifecycle.finish()
     }
 
-    /// Remove, then install again.
+    /// Remove, then install again. A failed reset does not stop it; its error stays visible.
     func reinstallHelper() async {
-        await removeHelper()
-        guard installError == nil else { return }
-        await installHelper()
+        guard !Self.localOnly, !lifecycle.removing else { return }
+        installError = nil
+        removeNeedsForce = false
+        let ok = await tearDownHelper(force: true)
+        if ok { await refreshStatus() }
+        let resetError = installError
+        if ok { await installHelper() }
+        if installError == nil { installError = resetError }
+        lifecycle.finish()
+    }
+
+    /// Waits out an in-flight configuration send, then runs the teardown. False when it stopped
+    /// early (reset failed without `force`).
+    private func tearDownHelper(force: Bool) async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while syncing, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        let outcome = await lifecycle.teardown(HelperSteps(client: client, installer: installer),
+                                               isEnabled: helperStatus == .enabled,
+                                               isRegistered: helperStatus != .notRegistered,
+                                               force: force)
+        client.invalidate()
+        sentGeneration = nil
+        if let reset = outcome.resetError {
+            log.error("resetAllToAuto before removal failed: \(reset, privacy: .public)")
+            installError = reset
+        }
+        if outcome.needsForce {
+            removeNeedsForce = true
+            return false
+        }
+        if let e = outcome.unregisterError {
+            log.error("unregister failed: \(e, privacy: .public)")
+            installError = e
+        } else if outcome.unregistered {
+            registrationMissing = false
+        }
+        return true
     }
 
     /// Opens Login Items and floats a small guide next to it until the helper is enabled.
@@ -234,16 +261,21 @@ final class AppModel {
     }
 
     private func tick() async {
-        if quitting { return }
+        if quitting || lifecycle.removing { return }
         await refreshStatusIfDue()
+        if lifecycle.removing { return }
         if helperStatus == .enabled {
-            await syncConfiguration()
             do {
                 let s = try await client.snapshot()
-                if quitting { return }
+                if quitting || lifecycle.removing { return }
                 helperError = nil
                 record(s)
-                await checkVersion(s.helperVersion, formatVersion: s.formatVersion)
+                // Configuration goes out only once this connection has answered and the helper
+                // is known to speak this app's format.
+                if await checkVersion(s.helperVersion, formatVersion: s.formatVersion), !lifecycle.removing {
+                    lifecycle.markReady(generation: client.connectionGeneration())
+                    await syncConfiguration()
+                }
                 return
             } catch {
                 log.error("snapshot failed: \(String(describing: error), privacy: .public)")
@@ -303,6 +335,7 @@ final class AppModel {
             if new != .requiresApproval { approvalGuide.close() }
             if new != .enabled {
                 client.invalidate()
+                lifecycle.connectionLost()
                 sentGeneration = nil
             }
         }
@@ -310,11 +343,12 @@ final class AppModel {
 
     /// Sends the configuration if the helper has not accepted this one on this connection yet.
     private func syncConfiguration() async {
-        guard helperStatus == .enabled, !syncing, !quitting else { return }
+        guard helperStatus == .enabled, !syncing, !quitting, !lifecycle.removing else { return }
         syncing = true
         defer { syncing = false }
-        while !quitting {
+        while !quitting, !lifecycle.removing {
             let generation = client.connectionGeneration()
+            guard lifecycle.canSync(generation: generation) else { return }
             let configuration = settings.helperConfiguration
             if generation == sentGeneration, configuration == sentConfiguration { return }
             do {
@@ -332,13 +366,15 @@ final class AppModel {
 
     /// Once per launch: a helper from another app version, or speaking another XPC format, is
     /// unregistered and registered again.
-    private func checkVersion(_ helperVersion: String, formatVersion: Int) async {
-        guard !versionChecked else { return }
+    /// Returns false when the helper was just re-registered (this connection is gone).
+    private func checkVersion(_ helperVersion: String, formatVersion: Int) async -> Bool {
+        guard !versionChecked else { return true }
         versionChecked = true
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-        guard helperVersion != appVersion || formatVersion != boreasXPCFormatVersion else { return }
+        guard helperVersion != appVersion || formatVersion != boreasXPCFormatVersion else { return true }
         log.notice("helper \(helperVersion, privacy: .public) (format \(formatVersion)) != app \(appVersion, privacy: .public) (format \(boreasXPCFormatVersion)), re-registering")
         client.invalidate()
+        lifecycle.connectionLost()
         sentGeneration = nil
         do {
             try await installer.unregister()
@@ -352,6 +388,7 @@ final class AppModel {
             }
         }
         await refreshStatus()
+        return false
     }
 
     private func persist() {
@@ -386,4 +423,14 @@ private final class LocalReader: @unchecked Sendable {
         let infos = (count ?? 0) > 0 ? ((try? fans?.fans()) ?? []) : []
         return Reading(sensors: sensors.read(), fans: infos, fanCount: count)
     }
+}
+
+/// Remove/Reinstall steps over the real client and `SMAppService`.
+@MainActor
+private struct HelperSteps: HelperServiceSteps {
+    let client: HelperClient
+    let installer: HelperInstaller
+
+    func resetAllToAuto() async throws { try await client.resetAllToAuto() }
+    func unregister() async throws { try await installer.unregister() }
 }
