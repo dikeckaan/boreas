@@ -15,10 +15,15 @@ public struct SafetyCeiling: Sendable {
     /// Feeds this step's readings; returns whether the ceiling is tripped.
     @discardableResult
     public mutating func update(readings: [SensorReading], now: Date) -> Bool {
+        // A backward clock jump invalidates the window.
+        if let newest = samples.last?.t, now < newest { samples.removeAll() }
         if let input = Self.input(from: readings) {
             samples.append((now, input))
         }
-        samples.removeAll { now.timeIntervalSince($0.t) >= Self.windowSeconds }
+        samples.removeAll {
+            let age = now.timeIntervalSince($0.t)
+            return !(age >= 0 && age < Self.windowSeconds)
+        }
         guard !samples.isEmpty else { return tripped }
         let avg = samples.reduce(0) { $0 + $1.c } / Double(samples.count)
         if avg > Self.tripC {

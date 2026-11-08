@@ -109,3 +109,47 @@ private func sustainedState(_ temp: Double) -> EngineState {
     step(modes: [:], cpu: 50, state: &s, t: 3)
     #expect(s.lastTick == t0.addingTimeInterval(3))
 }
+
+// Fix round 1
+@Test func backwardClockJumpDoesNotDisableCeiling() {
+    var s = EngineState()
+    let low = [reading("smc:Tp01", .cpu, 50, safety: true)]
+    let hot = [reading("smc:Tp01", .cpu, 140, safety: true)]
+    for i in 0..<5 { step(modes: [0: .fixed(rpm: 1200)], readings: low, state: &s, t: Double(i)) }
+    var tripped = false
+    for i in 0..<5 {
+        step(modes: [0: .fixed(rpm: 1200)], readings: hot, state: &s, t: -3600 + Double(i))
+        tripped = s.ceiling.tripped
+    }
+    #expect(tripped)
+}
+@Test func backwardJumpDisablesSmoothing() {
+    var s = EngineState()
+    step(profile: profile(), cpu: 55, state: &s, t: 100)
+    #expect(step(profile: profile(), cpu: 95, state: &s, t: 50) == [0: .manual(rpm: 4900)])
+}
+@Test func invalidFanInfoIsAuto() {
+    let bad = [FanInfo(index: 0, actual: 0, min: 4900, max: 1000, target: 0, isManual: false),
+               FanInfo(index: 0, actual: 0, min: 1000, max: .nan, target: 0, isManual: false),
+               FanInfo(index: 0, actual: 0, min: 0, max: 0, target: 0, isManual: false)]
+    for f in bad {
+        var s = sustainedState(105)
+        s.lastRPM[0] = 3000
+        let r = [reading("smc:Tp01", .cpu, 105, safety: true)]
+        #expect(step(modes: [0: .profile], profile: profile(), readings: r, state: &s, t: 5, fans: [f]) == [0: .auto])
+        #expect(step(modes: [0: .fixed(rpm: 2000)], readings: r, state: &s, t: 6, fans: [f]) == [0: .auto])
+        #expect(s.lastRPM[0] == nil)
+    }
+}
+@Test func negativeHysteresisClampedToZero() {
+    var s = EngineState()
+    let p = profile(smoothing: false, hyst: -3)
+    for i in 0..<4 { #expect(step(profile: p, cpu: 75, state: &s, t: Double(i)) == [0: .manual(rpm: 2950)]) }
+}
+@Test func nanHysteresisBehavesLikeDefault() {
+    var s = EngineState()
+    let p = profile(smoothing: false, hyst: .nan)
+    step(profile: p, cpu: 75, state: &s, t: 0)
+    #expect(step(profile: p, cpu: 73, state: &s, t: 1) == [0: .manual(rpm: 2950)])
+    #expect(step(profile: p, cpu: 70, state: &s, t: 2) == [0: .manual(rpm: 2755)])
+}

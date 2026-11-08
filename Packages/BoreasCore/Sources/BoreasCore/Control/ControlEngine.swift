@@ -35,7 +35,7 @@ public enum ControlEngine {
             if let profile, profile.builtIn != .automatic {
                 for rule in profile.rules {
                     guard let t = temperature(for: rule.source, readings: readings) else { continue }
-                    let h = profile.behavior.hysteresisC
+                    let h = profile.behavior.hysteresisC.isFinite ? Swift.max(0, profile.behavior.hysteresisC) : 3.0
                     var e = state.effectiveTemp[rule.id] ?? t
                     if t > e { e = t } else if t < e - h { e = t + h }
                     state.effectiveTemp[rule.id] = e
@@ -49,6 +49,11 @@ public enum ControlEngine {
         var result: [Int: FanCommand] = [:]
         for fan in fans {
             let mode = modes[fan.index] ?? .auto
+            guard fan.min.isFinite, fan.max.isFinite, fan.min <= fan.max, fan.max > 0 else {
+                state.lastRPM[fan.index] = nil
+                result[fan.index] = .auto
+                continue
+            }
             var command: FanCommand
             switch mode {
             case .auto:
