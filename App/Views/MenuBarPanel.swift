@@ -56,7 +56,7 @@ struct MenuBarPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if model.helperUnresponsive {
-                Label("Fan control helper isn't responding. Use Settings › Reinstall Helper, or restart your Mac.",
+                Label("Fan control helper isn't responding. Use Settings › Reinstall, or restart your Mac.",
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)

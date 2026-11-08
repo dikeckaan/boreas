@@ -94,58 +94,93 @@ private final class FakeSteps: HelperServiceSteps {
 
 private let reachT0 = ContinuousClock.now
 
+/// Feeds one failure per second from `from` through `to` (seconds); returns the repairs asked for.
+private func feed(_ r: inout HelperReachability, from: Int, to: Int, enabled: Bool = true) -> Int {
+    var repairs = 0
+    for sec in from...to where r.snapshotFailed(at: reachT0 + .seconds(sec), enabled: enabled) == .repair {
+        repairs += 1
+    }
+    return repairs
+}
+
 @Test func shortFailuresDoNotRepair() {
     var r = HelperReachability()
-    #expect(r.snapshotFailed(at: reachT0, enabled: true) == .none)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(9), enabled: true) == .none)
+    #expect(feed(&r, from: 0, to: 9) == 0)
     #expect(!r.isUnreachable && !r.showsWarning)
+}
+
+@Test func rapidFailuresWithinTenSecondsDoNotRepair() {
+    var r = HelperReachability()
+    for ms in 0..<6 {   // six failures in 2.5 s
+        #expect(r.snapshotFailed(at: reachT0 + .milliseconds(ms * 500), enabled: true) == .none)
+    }
+    #expect(!r.isUnreachable)
 }
 
 @Test func tenSecondsOfFailuresRepairsExactlyOnce() {
     var r = HelperReachability()
-    _ = r.snapshotFailed(at: reachT0, enabled: true)
+    #expect(feed(&r, from: 0, to: 9) == 0)
     #expect(r.snapshotFailed(at: reachT0 + .seconds(10), enabled: true) == .repair)
     #expect(r.isUnreachable)
-    // Further failures while the repair is pending/running do not ask again.
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(12), enabled: true) == .none)
+    #expect(feed(&r, from: 11, to: 20) == 0)
     #expect(!r.showsWarning)   // the repair has not been given a chance yet
+}
+
+@Test func fewFailuresSpreadOverTimeDoNotRepair() {
+    var r = HelperReachability()
+    // Interval 5 s: four failures cover 15 s but are not yet five in a row.
+    for sec in [0, 5, 10, 15] {
+        #expect(r.snapshotFailed(at: reachT0 + .seconds(sec), enabled: true, sampleInterval: .seconds(5)) == .none)
+    }
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(20), enabled: true, sampleInterval: .seconds(5)) == .repair)
+}
+
+@Test func gapFromSleepResetsTheStreak() {
+    var r = HelperReachability()
+    #expect(r.snapshotFailed(at: reachT0, enabled: true) == .none)
+    // Mac slept 60 s: one failure before, one after must not count as 60 s of failing.
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(60), enabled: true) == .none)
+    #expect(!r.isUnreachable)
+    #expect(feed(&r, from: 61, to: 68) == 0)
+    #expect(feed(&r, from: 69, to: 70) == 1)   // 10 s and 5+ failures since the gap
 }
 
 @Test func successResetsTheTimer() {
     var r = HelperReachability()
-    _ = r.snapshotFailed(at: reachT0, enabled: true)
-    _ = r.snapshotFailed(at: reachT0 + .seconds(8), enabled: true)
+    _ = feed(&r, from: 0, to: 8)
     r.snapshotSucceeded()
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(9), enabled: true) == .none)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(18), enabled: true) == .none)   // only 9 s since new start
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(19), enabled: true) == .repair)
+    #expect(feed(&r, from: 9, to: 17) == 0)
+    #expect(feed(&r, from: 18, to: 19) == 1)
 }
 
 @Test func secondUnreachablePeriodWarnsWithoutRepair() {
     var r = HelperReachability()
-    _ = r.snapshotFailed(at: reachT0, enabled: true)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(10), enabled: true) == .repair)
+    #expect(feed(&r, from: 0, to: 10) == 1)
     r.repairFinished()
     #expect(!r.showsWarning)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(11), enabled: true) == .none)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(21), enabled: true) == .none)
+    #expect(feed(&r, from: 11, to: 21) == 0)
     #expect(r.isUnreachable && r.showsWarning)
-    // Recovery clears the warning; a later outage never repairs again in this launch.
     r.snapshotSucceeded()
     #expect(!r.showsWarning)
-    _ = r.snapshotFailed(at: reachT0 + .seconds(100), enabled: true)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(120), enabled: true) == .none)
+    #expect(feed(&r, from: 100, to: 120) == 0)
     #expect(r.showsWarning)
+}
+
+@Test func abortedRepairKeepsTheRepairAvailable() {
+    var r = HelperReachability()
+    #expect(feed(&r, from: 0, to: 10) == 1)
+    r.repairAborted()
+    #expect(!r.isUnreachable && !r.showsWarning)
+    #expect(feed(&r, from: 11, to: 21) == 1)
 }
 
 @Test func nonEnabledStatusNeverRepairs() {
     var r = HelperReachability()
-    _ = r.snapshotFailed(at: reachT0, enabled: false)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(60), enabled: false) == .none)
+    #expect(feed(&r, from: 0, to: 60, enabled: false) == 0)
     #expect(!r.isUnreachable)
     // Leaving .enabled drops an earlier failure streak.
-    _ = r.snapshotFailed(at: reachT0 + .seconds(61), enabled: true)
-    _ = r.snapshotFailed(at: reachT0 + .seconds(65), enabled: false)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(70), enabled: true) == .none)
-    #expect(r.snapshotFailed(at: reachT0 + .seconds(80), enabled: true) == .repair)
+    _ = feed(&r, from: 61, to: 65)
+    _ = r.snapshotFailed(at: reachT0 + .seconds(66), enabled: false)
+    #expect(feed(&r, from: 67, to: 74) == 0)
+    #expect(feed(&r, from: 75, to: 80) == 1)
 }

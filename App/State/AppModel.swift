@@ -197,12 +197,16 @@ final class AppModel {
     /// reset is expected to fail and is ignored), register again, refresh the status. A status of
     /// `requiresApproval` is then handled by the normal onboarding flow. Blocks sync like Remove.
     private func repairUnreachableHelper() async {
-        guard !Self.localOnly, !quitting, !lifecycle.removing else { return }
+        guard !Self.localOnly, !quitting, !lifecycle.removing else {
+            reachability.repairAborted()
+            return
+        }
         log.notice("helper unreachable, repairing once")
+        lifecycle.begin()   // before any wait: Remove/Reinstall cannot start meanwhile
         installError = nil
         let ok = await tearDownHelper(force: true)
         installError = nil
-        if ok {
+        if ok, !quitting {
             await refreshStatus()
             await installHelper()
         }
@@ -324,7 +328,10 @@ final class AppModel {
             } catch {
                 log.error("snapshot failed: \(String(describing: error), privacy: .public)")
                 helperError = error.localizedDescription
-                let action = reachability.snapshotFailed(at: .now, enabled: helperStatus == .enabled)
+                // A Remove/Reinstall/Quit that began during the await must not count or repair.
+                if quitting || lifecycle.removing { return }
+                let action = reachability.snapshotFailed(at: .now, enabled: helperStatus == .enabled,
+                                                         sampleInterval: .seconds(settings.sampleInterval))
                 helperUnresponsive = reachability.showsWarning
                 if action == .repair { await repairUnreachableHelper() }
             }

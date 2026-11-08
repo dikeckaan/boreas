@@ -72,6 +72,9 @@ public final class HelperLifecycle {
         return out
     }
 
+    /// An operation such as the automatic repair starts: sync is blocked until `finish()`.
+    public func begin() { removing = true; readyGeneration = nil }
+
     /// Syncing may resume (after the status refresh that follows a removal).
     public func finish() { removing = false }
 }
@@ -92,7 +95,12 @@ public struct HelperReachability: Sendable {
     /// Continuous snapshot failure after which the helper counts as unreachable.
     public static let threshold: Duration = .seconds(10)
 
+    /// Failures needed in a row, besides `threshold` of elapsed time.
+    public static let minimumFailures = 5
+
     private var failingSince: ContinuousClock.Instant?
+    private var lastFailure: ContinuousClock.Instant?
+    private var failureCount = 0
     private var repairUsed = false
     /// Failures went on for `threshold` while the helper is enabled; cleared by a success.
     public private(set) var isUnreachable = false
@@ -103,22 +111,35 @@ public struct HelperReachability: Sendable {
 
     /// A snapshot succeeded: the timer and any warning reset.
     public mutating func snapshotSucceeded() {
-        failingSince = nil
+        clearStreak()
         isUnreachable = false
         showsWarning = false
     }
 
-    /// A snapshot failed at `now`. `.repair` is returned at most once per launch.
-    public mutating func snapshotFailed(at now: ContinuousClock.Instant, enabled: Bool) -> Action {
+    private mutating func clearStreak() {
+        failingSince = nil
+        lastFailure = nil
+        failureCount = 0
+    }
+
+    /// A snapshot failed at `now`. `.repair` is returned at most once per launch. A long gap since
+    /// the previous failure (sleep, or ticks that did not run) starts the streak over, so one
+    /// failure before and one after a sleep never add up to "10 seconds of failing".
+    public mutating func snapshotFailed(at now: ContinuousClock.Instant, enabled: Bool,
+                                        sampleInterval: Duration = .seconds(1)) -> Action {
         guard enabled else {
-            failingSince = nil
+            clearStreak()
             isUnreachable = false
             showsWarning = false
             return .none
         }
+        let maxGap = max(Duration.seconds(5), sampleInterval * 3)
+        if let last = lastFailure, now - last > maxGap { clearStreak() }
         let start = failingSince ?? now
         failingSince = start
-        guard now - start >= Self.threshold else { return .none }
+        lastFailure = now
+        failureCount += 1
+        guard failureCount >= Self.minimumFailures, now - start >= Self.threshold else { return .none }
         if isUnreachable { return .none }
         isUnreachable = true
         if repairUsed {
@@ -129,10 +150,18 @@ public struct HelperReachability: Sendable {
         return .repair
     }
 
+    /// The repair could not run (a guard rejected it): it stays available for later.
+    public mutating func repairAborted() {
+        repairUsed = false
+        isUnreachable = false
+        showsWarning = false
+        clearStreak()
+    }
+
     /// The repair (reset, register, status refresh) is done: the failure timer starts afresh, so
     /// the warning only appears if the helper stays silent for another `threshold`.
     public mutating func repairFinished() {
-        failingSince = nil
+        clearStreak()
         isUnreachable = false
         showsWarning = false
     }

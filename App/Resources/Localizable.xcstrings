@@ -361,7 +361,7 @@
         }
       }
     },
-    "Fan control helper isn't responding. Use Settings › Reinstall Helper, or restart your Mac." : {
+    "Fan control helper isn't responding. Use Settings › Reinstall, or restart your Mac." : {
       "localizations" : {
         "tr" : {
           "stringUnit" : {
