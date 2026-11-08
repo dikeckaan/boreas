@@ -1,6 +1,7 @@
 public enum CLICommand: Equatable, Sendable {
     case fans
     case keys(prefix: String?)
+    case sensors(raw: Bool)
     case auto
     case set(fan: Int, rpm: Double, hold: Int)
     case help
@@ -26,6 +27,9 @@ public enum CLICommand: Equatable, Sendable {
         switch cmd {
         case "fans": return .fans
         case "auto": return .auto
+        case "sensors":
+            guard rest.isEmpty || rest == ["--raw"] else { throw ParseError.usage("kullanım: boreasctl sensors [--raw]") }
+            return .sensors(raw: !rest.isEmpty)
         case "help", "-h", "--help": return .help
         case "keys": return .keys(prefix: rest.first)
         case "set":

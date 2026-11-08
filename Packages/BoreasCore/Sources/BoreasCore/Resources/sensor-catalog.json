@@ -1,1 +1,146 @@
-[]
+[
+  {
+    "match": "smc:TCMb",
+    "nameEN": "CPU peak",
+    "nameTR": "CPU en yüksek",
+    "group": "cpu",
+    "featured": true,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU tdie0",
+    "nameEN": "CPU die 0",
+    "nameTR": "CPU kalıp 0",
+    "group": "cpu",
+    "featured": true,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU tdie18",
+    "nameEN": "CPU die 18",
+    "nameTR": "CPU kalıp 18",
+    "group": "cpu",
+    "featured": true,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU tdie{n}",
+    "nameEN": "CPU die {n}",
+    "nameTR": "CPU kalıp {n}",
+    "group": "cpu",
+    "featured": false,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "smc:Tp0g",
+    "nameEN": "CPU performance cluster hot spot",
+    "nameTR": "CPU performans kümesi sıcak nokta",
+    "group": "cpu",
+    "featured": true,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "smc:Te*",
+    "nameEN": "CPU efficiency cluster",
+    "nameTR": "CPU verimlilik kümesi",
+    "group": "cpu",
+    "featured": false,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "smc:Tp*",
+    "nameEN": "CPU performance cluster",
+    "nameTR": "CPU performans kümesi",
+    "group": "cpu",
+    "featured": false,
+    "safety": true,
+    "suspect": false
+  },
+  {
+    "match": "smc:Tg01",
+    "nameEN": "GPU cluster",
+    "nameTR": "GPU kümesi",
+    "group": "gpu",
+    "featured": true,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "smc:Tg*",
+    "nameEN": "GPU cluster",
+    "nameTR": "GPU kümesi",
+    "group": "gpu",
+    "featured": false,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "hid:NAND CH0 temp",
+    "nameEN": "SSD (NAND)",
+    "nameTR": "SSD (NAND)",
+    "group": "storage",
+    "featured": true,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "smc:TH0*",
+    "nameEN": "SSD (NAND) sensor",
+    "nameTR": "SSD (NAND) sensörü",
+    "group": "storage",
+    "featured": false,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "smc:TW0P",
+    "nameEN": "Wi-Fi module",
+    "nameTR": "Wi-Fi modülü",
+    "group": "network",
+    "featured": true,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU2 tdie{n}",
+    "nameEN": "Secondary PMU die {n}",
+    "nameTR": "İkincil PMU kalıp {n}",
+    "group": "other",
+    "featured": false,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU2 tdev{n}",
+    "nameEN": "Secondary PMU device {n}",
+    "nameTR": "İkincil PMU aygıt {n}",
+    "group": "other",
+    "featured": false,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "hid:PMU tdev{n}",
+    "nameEN": "PMU device {n}",
+    "nameTR": "PMU aygıt {n}",
+    "group": "other",
+    "featured": false,
+    "safety": false,
+    "suspect": false
+  },
+  {
+    "match": "smc:TVMD",
+    "nameEN": "TVMD (constant 1 °C)",
+    "nameTR": "TVMD (sabit 1 °C)",
+    "group": "other",
+    "featured": false,
+    "safety": false,
+    "suspect": true
+  }
+]

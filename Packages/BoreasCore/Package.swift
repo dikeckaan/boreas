@@ -9,7 +9,7 @@ let package = Package(
         .executable(name: "boreasctl", targets: ["boreasctl"]),
     ],
     targets: [
-        .target(name: "CIOHID"),
+        .target(name: "CIOHID", linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
         .target(
             name: "BoreasCore",
             dependencies: ["CIOHID"],

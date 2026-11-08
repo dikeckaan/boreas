@@ -9,6 +9,7 @@ func fail(_ msg: String, code: Int32 = 1) -> Never {
 let usage = """
 kullanım: boreasctl <komut>
   fans                         fan tablosu
+  sensors [--raw]              sıcaklık sensörleri (--raw: katalogsuz, ham ad ve kimlik)
   keys [önek]                  SMC anahtarları (anahtar, tip, değer)
   auto                         tüm fanları Otomatik'e al (sudo)
   set <fan> <rpm> --hold <sn>  fanı elle sür, süre dolunca Otomatik'e dön (sudo, en fazla 120 sn)
@@ -35,6 +36,32 @@ if command == .help { print(usage); exit(0) }
 
 if case .set = command { requireRoot() }
 if command == .auto { requireRoot() }
+
+if case .sensors(let raw) = command {
+    let lang = Locale.preferredLanguages.first ?? "en"
+    if raw {
+        var sources: [SensorSource] = []
+        if let smc = try? IOKitSMCClient() { sources.append(SMCSensorSource(smc: smc)) }
+        sources.append(HIDSensorSource())
+        for s in sources {
+            for r in s.read().sorted(by: { $0.id.rawValue < $1.id.rawValue }) {
+                print(String(format: "%@\t%@\t%.1f", r.id.rawValue, r.rawName, r.celsius))
+            }
+        }
+    } else {
+        let rows = SensorReader.live(language: lang).read()
+        for g in SensorGroup.allCases {
+            let items = rows.filter { $0.group == g }.sorted { $0.name < $1.name }
+            if items.isEmpty { continue }
+            print("[\(g.rawValue)]")
+            for r in items {
+                let flags = [r.featured ? "öne çıkan" : nil, r.safety ? "güvenlik" : nil, r.suspect ? "şüpheli" : nil].compactMap { $0 }
+                print(String(format: "  %-24@ %6.1f °C  %@  %@", r.name, r.celsius, r.id.rawValue, flags.joined(separator: ",")))
+            }
+        }
+    }
+    exit(0)
+}
 
 let smc: IOKitSMCClient
 do { smc = try IOKitSMCClient() } catch { fail("SMC açılamadı: \(error)") }
@@ -94,7 +121,7 @@ do {
         }
         timer.resume()
         dispatchMain()
-    case .help:
+    case .help, .sensors:
         break
     }
 } catch {
