@@ -76,3 +76,12 @@ private func fake(modeKey: FourCC = "F0md", extra: [FourCC: SMCValue] = [:]) -> 
   #expect(try CLICommand.parse(["keys", "F"]) == .keys(prefix: "F"))
   #expect(try CLICommand.parse(["auto"]) == .auto)
   #expect(throws: CLICommand.ParseError.self) { try CLICommand.parse(["bogus"]) } }
+
+// M1: an unreadable mode key fails toward manual.
+@Test func fansReportManualWhenModeKeyUnreadable() throws {
+  let s = FakeSMCClient(values: ["FNum": .ui8(1), "F0Ac": .flt(1), "F0Mn": .flt(1000), "F0Mx": .flt(4900), "F0Tg": .flt(1)])
+  let c = FanController(smc: s)
+  #expect(try c.fans().first?.isManual == true)
+  #expect(c.isManual(fan: 0))
+  #expect(!FanController(smc: fake()).isManual(fan: 0))
+  #expect(FanController(smc: fake(extra: ["F0md": .ui8(1)])).isManual(fan: 0)) }

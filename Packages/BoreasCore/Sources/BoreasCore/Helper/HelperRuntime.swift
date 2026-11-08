@@ -16,6 +16,11 @@ public final class HelperRuntime: @unchecked Sendable {
     public static let idleExitSeconds: TimeInterval = 10
     /// After a write to a fan fails, manual commands for that fan wait this long before being retried.
     public static let writeFailureBackoffSeconds: TimeInterval = 30
+    /// While the set of unverified fans stays the same, its fault is logged at most this often.
+    public static let unverifiedLogIntervalSeconds: TimeInterval = 60
+    /// What `apply` answers when the helper runs without its sensor catalog.
+    public static let catalogUnavailableMessage =
+        "The helper could not load its sensor catalog; fan control is disabled and every fan stays automatic."
 
     public static var bundleVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -26,6 +31,9 @@ public final class HelperRuntime: @unchecked Sendable {
     private let now: () -> Date
     private let helperVersion: String
     private let startTime: Date
+    /// False when the sensor catalog failed to load: the helper then refuses every configuration
+    /// (all fans stay auto), because safety sensors and names cannot be trusted.
+    private let catalogAvailable: Bool
 
     private var configuration: HelperConfiguration?
     private var engine = EngineState()
@@ -42,13 +50,19 @@ public final class HelperRuntime: @unchecked Sendable {
     private var asleep = false
     private var lastReadings: [SensorReading] = []
     private var lastReadingsAt: Date?
+    /// Unverified set and time of the last fault logged for it (rate limit).
+    private var loggedUnverified: Set<Int> = []
+    private var loggedUnverifiedAt: Date?
+    /// Number of unverified-fan faults logged; for tests.
+    private(set) var unverifiedFaultLogCount = 0
 
     public init(fans: FanController, sensors: SensorReader, now: @escaping () -> Date,
-                helperVersion: String = HelperRuntime.bundleVersion) {
+                helperVersion: String = HelperRuntime.bundleVersion, catalogAvailable: Bool = true) {
         self.fanController = fans
         self.sensors = sensors
         self.now = now
         self.helperVersion = helperVersion
+        self.catalogAvailable = catalogAvailable
         self.startTime = now()
         // A previous helper instance may have died with a fan in manual mode.
         noteUnverified(fans.setAllAuto())
@@ -56,10 +70,17 @@ public final class HelperRuntime: @unchecked Sendable {
 
     // MARK: - Client events
 
-    /// Stores the configuration and, unless asleep, applies it right away.
-    public func apply(_ c: HelperConfiguration) {
+    /// Stores the configuration and, unless asleep, applies it right away. Returns an error message
+    /// instead when the helper refuses manual control (no sensor catalog); fans then stay auto.
+    @discardableResult
+    public func apply(_ c: HelperConfiguration) -> String? {
+        guard catalogAvailable else {
+            log.error("configuration refused: sensor catalog unavailable")
+            return Self.catalogUnavailableMessage
+        }
         configuration = c
         control()
+        return nil
     }
 
     /// Puts every fan back to auto and drops the configuration until the next `apply`.
@@ -127,7 +148,9 @@ public final class HelperRuntime: @unchecked Sendable {
         }
         for fan in unverifiedFans { commands[fan] = "unverified" }
         return HelperSnapshot(fans: (try? fanController.fans()) ?? [], sensors: readings, commands: commands,
-                              ceilingTripped: engine.ceiling.tripped, helperVersion: helperVersion,
+                              ceilingTripped: engine.ceiling.tripped,
+                              ceilingBlind: configuration != nil && engine.ceiling.blind,
+                              catalogUnavailable: !catalogAvailable, helperVersion: helperVersion,
                               formatVersion: boreasXPCFormatVersion)
     }
 
@@ -153,8 +176,19 @@ public final class HelperRuntime: @unchecked Sendable {
         logUnverified()
     }
 
+    /// Logs the unverified set when it changed, or at most once per `unverifiedLogIntervalSeconds`
+    /// while it stays the same (it is retried every tick).
     private func logUnverified() {
+        let t = now()
+        defer { if unverifiedFans.isEmpty { loggedUnverified = [] } }
         guard !unverifiedFans.isEmpty else { return }
+        if unverifiedFans == loggedUnverified, let last = loggedUnverifiedAt {
+            let elapsed = t.timeIntervalSince(last)
+            if elapsed >= 0 && elapsed < Self.unverifiedLogIntervalSeconds { return }
+        }
+        loggedUnverified = unverifiedFans
+        loggedUnverifiedAt = t
+        unverifiedFaultLogCount += 1
         let list = unverifiedFans.sorted().map(String.init).joined(separator: ", ")
         log.fault("fan(s) \(list, privacy: .public) could not be confirmed in automatic mode")
     }
@@ -173,6 +207,11 @@ public final class HelperRuntime: @unchecked Sendable {
         }
     }
 
+    private func markUnverified(_ fan: Int) {
+        unverifiedFans.insert(fan)
+        logUnverified()
+    }
+
     private func dropConfiguration() {
         configuration = nil
         engine = EngineState()
@@ -189,6 +228,15 @@ public final class HelperRuntime: @unchecked Sendable {
             // Without fan limits nothing can be computed safely.
             restoreAuto()
             return
+        }
+        // A fan whose real mode disagrees with the cached command (reset by something else, or a
+        // write that did not stick) has unknown state: forget the cache so it is rewritten. Unverified
+        // fans are skipped: their reset is already retried every tick by `retryUnverified`.
+        for fan in fans where !unverifiedFans.contains(fan.index) {
+            guard let cached = applied[fan.index] else { continue }
+            let cachedManual: Bool
+            if case .manual = cached { cachedManual = true } else { cachedManual = false }
+            if cachedManual != fan.isManual { applied[fan.index] = nil }
         }
         let commands = ControlEngine.step(fans: fans, modes: configuration.fanModes, profile: configuration.profile,
                                           readings: readings, state: &engine, now: t)
@@ -210,17 +258,20 @@ public final class HelperRuntime: @unchecked Sendable {
             if case .manual = command, let until = backoffUntil[fan], t < until { continue }
             do {
                 switch command {
-                case .auto: try fanController.setAuto(fan: fan)
-                case .manual(let rpm): try fanController.setManual(fan: fan, rpm: rpm)
+                case .auto:
+                    try fanController.setAuto(fan: fan)
+                    // Verified only once the mode reads back as auto.
+                    if fanController.isManual(fan: fan) { markUnverified(fan) } else { unverifiedFans.remove(fan) }
+                case .manual(let rpm):
+                    try fanController.setManual(fan: fan, rpm: rpm)
+                    unverifiedFans.remove(fan)
                 }
                 applied[fan] = command
                 backoffUntil[fan] = nil
-                unverifiedFans.remove(fan)
             } catch {
                 log.fault("fan \(fan, privacy: .public) write failed: \(String(describing: error), privacy: .public)")
-                do { try fanController.setAuto(fan: fan) } catch {
-                    unverifiedFans.insert(fan)
-                    logUnverified()
+                if (try? fanController.setAuto(fan: fan)) == nil || fanController.isManual(fan: fan) {
+                    markUnverified(fan)
                 }
                 applied[fan] = .auto
                 backoffUntil[fan] = t.addingTimeInterval(Self.writeFailureBackoffSeconds)

@@ -27,16 +27,21 @@ public final class FanController: @unchecked Sendable {
 
     public func fans() throws -> [FanInfo] {
         try (0..<fanCount).map { i in
-            let mode = try? modeKey(for: i)
-            let manual = mode.flatMap { (try? smc.read($0))?.doubleValue }.map { $0 != 0 } ?? false
-            return FanInfo(
+            FanInfo(
                 index: i,
                 actual: try number("F\(i)Ac"),
                 min: try number("F\(i)Mn"),
                 max: try number("F\(i)Mx"),
                 target: try number("F\(i)Tg"),
-                isManual: manual)
+                isManual: isManual(fan: i))
         }
+    }
+
+    /// Whether the fan is under manual control. An unreadable mode key counts as manual, so callers
+    /// that verify a return to auto never take "unknown" for "auto".
+    public func isManual(fan: Int) -> Bool {
+        guard let mode = try? modeKey(for: fan), let v = try? smc.read(mode).doubleValue else { return true }
+        return v != 0
     }
 
     public func setManual(fan: Int, rpm: Double) throws {
@@ -71,10 +76,7 @@ public final class FanController: @unchecked Sendable {
             if let mode = try? modeKey(for: i) { try? smc.write(mode, bytes: [0]) }
         }
         if (try? smc.read(Self.unlockKey)) != nil { try? smc.write(Self.unlockKey, bytes: [0]) }
-        return indices.filter { i in
-            guard let mode = try? modeKey(for: i), let v = try? smc.read(mode).doubleValue else { return true }
-            return v != 0
-        }
+        return indices.filter(isManual(fan:))
     }
 
     private func clearUnlockIfNoManualFans() throws {

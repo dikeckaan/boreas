@@ -21,11 +21,14 @@ private final class CountingSMC: SMCClient, @unchecked Sendable {
     private(set) var attempts: [FourCC: Int] = [:]
     /// Extra failure rule checked before the write reaches the fake.
     var reject: ((FourCC, [UInt8]) -> Bool)?
+    /// Writes that report success but never reach the fake (an SMC that ignores the key).
+    var ignore: ((FourCC, [UInt8]) -> Bool)?
     init(_ inner: FakeSMCClient) { self.inner = inner }
     func read(_ key: FourCC) throws -> SMCValue { try inner.read(key) }
     func write(_ key: FourCC, bytes: [UInt8]) throws {
         attempts[key, default: 0] += 1
         if reject?(key, bytes) == true { throw SMCError.ioFailure(-1) }
+        if ignore?(key, bytes) == true { return }
         try inner.write(key, bytes: bytes)
     }
     func allKeys() throws -> [FourCC] { try inner.allKeys() }
@@ -42,7 +45,7 @@ private struct Rig {
 private func flt(_ v: Double) -> SMCValue { SMCValue(key: "XXXX", type: "flt ", bytes: SMCValue.encode(v, as: .flt)) }
 private func ui8(_ v: Double) -> SMCValue { SMCValue(key: "XXXX", type: "ui8 ", bytes: SMCValue.encode(v, as: .ui8)) }
 
-private func make(fanCount: Int = 1, version: String = "9.9.9") -> Rig {
+private func make(fanCount: Int = 1, version: String = "9.9.9", catalogAvailable: Bool = true) -> Rig {
     var v: [FourCC: SMCValue] = ["FNum": ui8(Double(fanCount))]
     for i in 0..<fanCount {
         v[FourCC("F\(i)Ac")] = flt(1000); v[FourCC("F\(i)Mn")] = flt(1000); v[FourCC("F\(i)Mx")] = flt(4900)
@@ -55,7 +58,8 @@ private func make(fanCount: Int = 1, version: String = "9.9.9") -> Rig {
     let catalog = SensorCatalog(entries: [.init(match: "hid:cpu", nameEN: "CPU", nameTR: "CPU", group: .cpu,
                                                 featured: true, safety: false, suspect: false)])
     let reader = SensorReader(sources: [temp], catalog: catalog, language: "en")
-    let rt = HelperRuntime(fans: FanController(smc: counter), sensors: reader, now: { clock.now() }, helperVersion: version)
+    let rt = HelperRuntime(fans: FanController(smc: counter), sensors: reader, now: { clock.now() }, helperVersion: version,
+                           catalogAvailable: catalogAvailable)
     return Rig(rt: rt, smc: smc, counter: counter, clock: clock, temp: temp)
 }
 
@@ -428,7 +432,7 @@ private func running() -> Rig {
 }
 
 @Test func snapshotCarriesXPCFormatVersion() {
-    #expect(boreasXPCFormatVersion == 2)
+    #expect(boreasXPCFormatVersion == 3)
     #expect(running().rt.snapshot().formatVersion == boreasXPCFormatVersion)
 }
 
@@ -439,4 +443,124 @@ private func running() -> Rig {
     let old = try JSONDecoder().decode(HelperSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
     #expect(old.formatVersion == 0)
     #expect(old.fans == s.fans)
+}
+
+@Test func snapshotFromOlderHelperDecodesNewFlagsAsFalse() throws {
+    let s = running().rt.snapshot()
+    var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
+    #expect(json["ceilingBlind"] as? Bool == false)
+    #expect(json["catalogUnavailable"] as? Bool == false)
+    json.removeValue(forKey: "ceilingBlind")
+    json.removeValue(forKey: "catalogUnavailable")
+    let old = try JSONDecoder().decode(HelperSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(!old.ceilingBlind)
+    #expect(!old.catalogUnavailable)
+}
+
+// MARK: - Final review
+
+// I1(a): with no valid safety input the helper hands controlled fans back to Apple.
+@Test func runtimeGoesAutoWhenBlindAndResumesWhenInputReturns() {
+    let r = make()
+    r.rt.clientConnected()
+    r.rt.apply(fixed(3000))
+    #expect(mode(r.smc) == 1)
+    r.temp.cpu = 0                                   // invalid: no safety input at all
+    for _ in 0..<5 { r.clock.advance(1); r.rt.tick() }
+    #expect(mode(r.smc) == 1)
+    r.clock.advance(1); r.rt.tick()                  // 6 s without input
+    #expect(mode(r.smc) == 0)
+    #expect(r.rt.snapshot().ceilingBlind)
+    #expect(r.rt.snapshot().commands == [0: "auto"])
+    r.temp.cpu = 60
+    r.clock.advance(1); r.rt.tick()
+    #expect(mode(r.smc) == 1)
+    #expect(lastTarget(r.smc) == 3000)
+    #expect(!r.rt.snapshot().ceilingBlind)
+}
+
+// I1(c): without the catalog the helper refuses manual control.
+@Test func catalogUnavailableRefusesManualCommands() {
+    let r = make(catalogAvailable: false)
+    r.rt.clientConnected()
+    let error = r.rt.apply(fixed(3000))
+    #expect(error != nil)
+    #expect(r.rt.apply(silentConfig) != nil)
+    for _ in 0..<3 { r.clock.advance(1); r.rt.tick() }
+    #expect(mode(r.smc) == 0)
+    #expect(!r.smc.writes.contains { $0.0 == "F0md" && $0.1 == [1] })
+    #expect(writeCount(r.smc, "F0Tg") == 0)
+    let s = r.rt.snapshot()
+    #expect(s.catalogUnavailable)
+    #expect(s.commands.isEmpty)
+    #expect(s.sensors.map(\.celsius) == [50])       // readings still reported
+}
+
+@Test func catalogAvailableAcceptsConfiguration() {
+    let r = make()
+    #expect(r.rt.apply(fixed(3000)) == nil)
+    #expect(!r.rt.snapshot().catalogUnavailable)
+}
+
+// M1: a per-fan return to auto is read back before the fan counts as verified.
+@Test func perFanAutoIsReadBackBeforeCountingAsVerified() {
+    let r = make()
+    r.rt.clientConnected()
+    r.rt.apply(fixed(3000))
+    #expect(mode(r.smc) == 1)
+    r.counter.ignore = { key, bytes in key == "F0md" && bytes == [0] }   // "succeeds" but stays manual
+    r.rt.apply(HelperConfiguration(fanModes: [0: .auto], profile: nil))
+    #expect(mode(r.smc) == 1)
+    #expect(r.rt.snapshot().commands[0] == "unverified")
+    r.clock.advance(1); r.rt.tick()
+    #expect(r.rt.snapshot().commands[0] == "unverified")
+    #expect(!r.rt.shouldExit)
+    r.counter.ignore = nil
+    r.clock.advance(1); r.rt.tick()
+    #expect(mode(r.smc) == 0)
+    #expect(r.rt.snapshot().commands == [0: "auto"])
+}
+
+// M2: a fan whose real mode disagrees with the cached command is rewritten.
+@Test func fanResetBehindTheHelpersBackIsRewritten() throws {
+    let r = make()
+    r.rt.clientConnected()
+    r.rt.apply(fixed(3000))
+    let targets = writeCount(r.smc, "F0Tg")
+    try r.smc.write("F0md", bytes: [0])               // e.g. `boreasctl auto` from a terminal
+    r.clock.advance(1); r.rt.tick()
+    #expect(mode(r.smc) == 1)
+    #expect(writeCount(r.smc, "F0Tg") == targets + 1)
+    #expect(lastTarget(r.smc) == 3000)
+    r.clock.advance(1); r.rt.tick()                   // agreement again: no redundant write
+    #expect(writeCount(r.smc, "F0Tg") == targets + 1)
+}
+
+@Test func autoFanFoundManualIsRewritten() throws {
+    let r = make(fanCount: 2)
+    r.rt.clientConnected()
+    r.rt.apply(HelperConfiguration(fanModes: [0: .fixed(rpm: 3000), 1: .auto], profile: nil))
+    #expect(mode(r.smc, fan: 1) == 0)
+    try r.smc.write("F1md", bytes: [1])
+    r.clock.advance(1); r.rt.tick()
+    #expect(mode(r.smc, fan: 1) == 0)
+    #expect(mode(r.smc, fan: 0) == 1)
+}
+
+// Fault log: only when the unverified set changes, or once a minute while it persists.
+@Test func unverifiedFaultLogIsRateLimited() {
+    let r = make(fanCount: 2)
+    r.rt.clientConnected()
+    r.counter.reject = { key, bytes in key == "F1Tg" || (key == "F1md" && bytes == [0]) }
+    r.rt.apply(fixed(3000, fans: 2))
+    #expect(r.rt.snapshot().commands[1] == "unverified")
+    let first = r.rt.unverifiedFaultLogCount
+    #expect(first == 1)
+    for _ in 0..<59 { r.clock.advance(1); r.rt.tick() }
+    #expect(r.rt.unverifiedFaultLogCount == first)
+    r.clock.advance(1); r.rt.tick()
+    #expect(r.rt.unverifiedFaultLogCount == first + 1)
+    r.counter.reject = { key, bytes in (key == "F0md" || key == "F1md") && bytes == [0] }
+    r.rt.resetAllToAuto()                             // set changes to {0, 1}
+    #expect(r.rt.unverifiedFaultLogCount == first + 2)
 }

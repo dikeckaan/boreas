@@ -79,7 +79,7 @@ public struct HelperConfiguration: Codable, Equatable, Sendable {
 /// Version of the app-helper XPC payload format. Bump it when `HelperSnapshot` or
 /// `HelperConfiguration` change in a way an older peer cannot read; the app re-registers a helper
 /// whose snapshot reports a different value.
-public let boreasXPCFormatVersion = 2
+public let boreasXPCFormatVersion = 3
 
 /// What the helper reports back to the app.
 public struct HelperSnapshot: Codable, Equatable, Sendable {
@@ -88,13 +88,20 @@ public struct HelperSnapshot: Codable, Equatable, Sendable {
     /// Last command successfully applied per fan: `"auto"` or `"manual:<rpm>"` (whole rpm).
     public var commands: [Int: String]
     public var ceilingTripped: Bool
+    /// No valid safety input for longer than the ceiling's window: controlled fans are on auto.
+    public var ceilingBlind: Bool
+    /// The helper could not load its sensor catalog and refuses manual control.
+    public var catalogUnavailable: Bool
     public var helperVersion: String
     /// `boreasXPCFormatVersion` of the helper; 0 for a helper that predates the field.
     public var formatVersion: Int
 
     public init(fans: [FanInfo], sensors: [SensorReading], commands: [Int: String],
-                ceilingTripped: Bool, helperVersion: String, formatVersion: Int = boreasXPCFormatVersion) {
+                ceilingTripped: Bool, ceilingBlind: Bool = false, catalogUnavailable: Bool = false,
+                helperVersion: String, formatVersion: Int = boreasXPCFormatVersion) {
         self.formatVersion = formatVersion
+        self.ceilingBlind = ceilingBlind
+        self.catalogUnavailable = catalogUnavailable
         self.fans = fans
         self.sensors = sensors
         self.commands = commands
@@ -103,7 +110,7 @@ public struct HelperSnapshot: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fans, sensors, commands, ceilingTripped, helperVersion, formatVersion
+        case fans, sensors, commands, ceilingTripped, ceilingBlind, catalogUnavailable, helperVersion, formatVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -112,6 +119,9 @@ public struct HelperSnapshot: Codable, Equatable, Sendable {
         sensors = try c.decode([SensorReading].self, forKey: .sensors)
         commands = try c.decode([Int: String].self, forKey: .commands)
         ceilingTripped = try c.decode(Bool.self, forKey: .ceilingTripped)
+        // Absent from helpers older than format 3.
+        ceilingBlind = try c.decodeIfPresent(Bool.self, forKey: .ceilingBlind) ?? false
+        catalogUnavailable = try c.decodeIfPresent(Bool.self, forKey: .catalogUnavailable) ?? false
         helperVersion = try c.decode(String.self, forKey: .helperVersion)
         formatVersion = try c.decodeIfPresent(Int.self, forKey: .formatVersion) ?? 0
     }

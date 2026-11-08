@@ -23,7 +23,7 @@ private let messageSystemHasPoweredOn: UInt32 = 0xE000_0300
 /// the helper lives in Boreas.app/Contents/MacOS, so `Bundle.main`'s URLs point at the app and
 /// the source of the Team ID should not depend on how Foundation resolves the main bundle.
 /// (`Bundle.main.resourceURL` being the app's Resources is where `SensorCatalog.bundled()` finds
-/// `BoreasCore_BoreasCore.bundle`; if it is missing, the helper runs with an empty catalog.)
+/// `BoreasCore_BoreasCore.bundle`; if it is missing, the helper refuses manual control.)
 private func embeddedInfoPlist() -> [String: Any] {
     var size: UInt = 0
     let header = #dsohandle.assumingMemoryBound(to: mach_header_64.self)
@@ -72,8 +72,8 @@ final class XPCHandler: NSObject, BoreasHelperXPC, @unchecked Sendable {
         queue.async {
             self.tracker.messageReceived()
             do {
-                self.runtime.apply(try JSONDecoder().decode(HelperConfiguration.self, from: configuration))
-                reply(nil)
+                // nil, or why the runtime refused it (sensor catalog unavailable).
+                reply(self.runtime.apply(try JSONDecoder().decode(HelperConfiguration.self, from: configuration)))
             } catch {
                 reply("Invalid configuration: \(error)")
             }
@@ -219,8 +219,11 @@ let fans = FanController(smc: smc)
 fans.setAllAuto()
 
 // Created before any event source exists; from here on only touched on service.queue.
-let runtime = HelperRuntime(fans: fans, sensors: SensorReader.live(language: "en"),
-                            now: monotonicNow, helperVersion: helperVersion)
+// Without its sensor catalog the helper fails closed: every fan stays automatic.
+let sensors = SensorReader.live(language: "en")
+if !sensors.catalogLoaded { log.fault("sensor catalog unavailable; manual fan control disabled") }
+let runtime = HelperRuntime(fans: fans, sensors: sensors, now: monotonicNow, helperVersion: helperVersion,
+                            catalogAvailable: sensors.catalogLoaded)
 let service = HelperService(runtime: runtime, version: helperVersion,
                             requirement: clientRequirement(teamID: info["BoreasTeamID"] as? String))
 service.start()

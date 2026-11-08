@@ -138,3 +138,9 @@ private func tempFake() -> FakeSMCClient {
     let r = try JSONDecoder().decode(SensorReading.self, from: Data(json.utf8))
     #expect(r.hotspot == false)
 }
+
+// Final review I1(c): the helper learns whether the catalog loaded.
+@Test func liveReaderReportsWhetherCatalogLoaded() {
+  #expect(!SensorReader.live(language: "en", catalogSearchPaths: []).catalogLoaded)
+  #expect(SensorReader.live(language: "en").catalogLoaded)
+}
