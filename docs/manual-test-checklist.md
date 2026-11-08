@@ -68,6 +68,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 
 ## Release package
 
-- ☐ `scripts/release.sh <version>` (with notary credentials) finishes and `spctl -a -vv -t install Boreas-<version>.dmg` reports `accepted`.
-- ☐ Download the DMG (quarantine flag set), open it → no Gatekeeper warning; the window shows the aurora background, Boreas.app on the left and the Applications shortcut on the right.
+- ☐ `scripts/release.sh <version>` (with notary credentials) finishes; the Gatekeeper check on a quarantined copy of the app taken from the DMG reports `accepted` (`spctl -a -vv -t exec`).
+- ☐ Only when the build machine has a local Developer ID Application identity: the DMG is signed, notarized and stapled, and `spctl -a -vv -t install Boreas-<version>.dmg` reports `accepted`. Without that identity the DMG is intentionally unsigned and carries the notarized, stapled app.
+- ☐ Download the DMG (quarantine flag set), open it → the window shows the aurora background, Boreas.app on the left and the Applications shortcut on the right.
 - ☐ Drag Boreas to Applications and launch it → opens without a Gatekeeper prompt.

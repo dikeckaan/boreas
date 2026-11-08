@@ -6,10 +6,9 @@ Boreas, Apple Silicon'lu Mac'ler için ücretsiz ve açık kaynaklı bir fan den
 
 Boreas bağımsız bir projedir; Macs Fan Control ile bağlantısı yoktur ve ondan türetilmemiştir.
 
-<!-- Ekran görüntüleri: aşağıdaki yer tutucuları gerçek görüntülerle değiştirin (PNG, yaklaşık 1600 px genişlik). -->
-| Ana pencere | Menü çubuğu paneli | Profil düzenleyici |
-|---|---|---|
-| ![Ana pencere](docs/screenshots/main-window.png) <!-- TODO: docs/screenshots/main-window.png --> | ![Menü çubuğu paneli](docs/screenshots/menu-bar.png) <!-- TODO: docs/screenshots/menu-bar.png --> | ![Profil düzenleyici](docs/screenshots/profile-editor.png) <!-- TODO: docs/screenshots/profile-editor.png --> |
+Ekran görüntüleri (yakında): ana pencere, menü çubuğu paneli, profil düzenleyici. `docs/screenshots/` altında yer alacak.
+
+<!-- TODO: docs/screenshots/main-window.png, docs/screenshots/menu-bar.png, docs/screenshots/profile-editor.png -->
 
 ## Gereksinimler
 
@@ -18,22 +17,26 @@ Boreas bağımsız bir projedir; Macs Fan Control ile bağlantısı yoktur ve on
 
 ## Kurulum
 
+> **Ön sürüm:** henüz yayımlanmış, Apple onayından (notarization) geçmiş bir sürüm yok. İlk GitHub sürümü çıkana kadar kaynaktan derleyin (aşağıda). Sürüm DMG'sinin içindeki uygulama Apple onaylı ve staple'lı olacak; geliştiricinin Mac'inde Developer ID kimliği yoksa DMG'nin kendisi imzasız olur.
+
 1. Sürümler sayfasından `Boreas-<sürüm>.dmg` dosyasını indirip açın.
 2. **Boreas**'ı **Uygulamalar**'a sürükleyin ve uygulamayı oradan açın.
-3. Fan devrini yazabilmek için Boreas'ın küçük bir yardımcı servise (root) ihtiyacı vardır. Karşılama ekranında **Yardımcı Servisi Kur**'a basın, ardından **Sistem Ayarları → Genel → Oturum Açma Öğeleri ve Uzantılar** bölümünde **Arka Planda İzin Ver** altındaki **Boreas** düğmesini açın. Bu onay bir kez gerekir; küçük bir yönlendirme paneli düğmeyi gösterir.
+3. Fan devrini yazabilmek için Boreas'ın küçük bir yardımcı servise (root) ihtiyacı vardır. Karşılama ekranında **Yardımcı Servisi Kur**'a basın, ardından **Sistem Ayarları → Genel → Giriş Öğeleri ve Uzantılar** bölümünde **Arka Planda İzin Ver** altındaki **Boreas** düğmesini açın. Bu onay bir kez gerekir; küçük bir yönlendirme paneli düğmeyi gösterir.
 
 Yardımcı servisi istediğiniz zaman Boreas → Ayarlar → **Kaldır** ile silebilirsiniz.
 
 ## Güvenlik
 
-Boreas bir fanı asla elle modda takılı bırakmaz. Şu kurallar kapatılamaz:
+Boreas bir fanı asla elle modda takılı bırakmaz. Şu kurallar kapatılamaz. Donanım durumu (2026-11-08; ayrıntı [docs/manual-test-checklist.md](docs/manual-test-checklist.md)):
 
-1. Uygulama kapanır, çöker ya da öldürülürse yardımcı servis birkaç saniye içinde tüm fanları Otomatik'e alır.
-2. Uykudan önce fanlar Otomatik'e alınır; uyanınca uygulama çalışıyorsa etkin profil yeniden uygulanır.
-3. Yardımcı servis sonlanırken (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır.
-4. Bir sensör okunamazsa ya da değer saçmaysa (NaN, 0, 150 °C üstü), ona bağlı kurallar devre dışı kalır; geçerli kural kalmazsa fan Otomatik'e döner.
-5. Kritik sıcaklık tavanı, sabit bir CPU ve GPU güvenlik sensörü kümesini izler. Bunların 5 saniyelik ortalaması 100 °C'yi aşarsa, profil ne derse desin fan maksimuma alınır; ortalama 90 °C'nin altına inince profile dönülür. Bu sensörleri tavandan gizleyemezsiniz.
-6. Sabit devir, fanın gerçek en düşük ve en yüksek değerine sıkıştırılır.
+1. Uygulama kapanır, çöker ya da öldürülürse yardımcı servis birkaç saniye içinde tüm fanları Otomatik'e alır. *Donanımda doğrulandı: `kill -9` → 3 sn'de Otomatik, Çık → 1 sn'de Otomatik.*
+2. Uykudan önce fanlar Otomatik'e alınır; uyanınca uygulama çalışıyorsa etkin profil yeniden uygulanır. *Birim testli; uyku/uyanma donanımda henüz doğrulanmadı.*
+3. Yardımcı servis sonlanırken (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır. *Birim testli; SIGTERM donanımda henüz doğrulanmadı.*
+4. Bir sensör okunamazsa ya da değer saçmaysa (NaN, 0, 150 °C üstü), ona bağlı kurallar devre dışı kalır; geçerli kural kalmazsa fan Otomatik'e döner. *Birim testli.*
+5. Kritik sıcaklık tavanı, sabit bir CPU ve GPU güvenlik sensörü kümesini izler. Bunların 5 saniyelik ortalaması 100 °C'yi aşarsa, profil ne derse desin fan maksimuma alınır; ortalama 90 °C'nin altına inince profile dönülür. Bu sensörleri tavandan gizleyemezsiniz. *Birim testli; gerçek yük altında henüz doğrulanmadı.*
+6. Sabit devir, fanın gerçek en düşük ve en yüksek değerine sıkıştırılır. *Birim testli.*
+
+Donanımda ayrıca doğrulandı: yardımcı servis boştayken kendiliğinden çıkar, yeniden açılan uygulama profili yeniden uygular ve `boreasctl set` yazma testi fanı Otomatik'e döndürür. Henüz doğrulanmadı: yetkisiz bir istemcinin yardımcı servisle konuşamadığı.
 
 ## Test edilen donanım
 
@@ -59,19 +62,20 @@ open Boreas.xcodeproj
 DEVELOPMENT_TEAM = XXXXXXXXXX
 ```
 
-Birim testleri için `cd Packages/BoreasCore && swift test` çalıştırın. Sürüm DMG'si için `scripts/release.sh <sürüm> --skip-notarize` (deneme çalıştırması); bayrak olmadan `boreas-notary` notarytool anahtar zinciri profiliyle noter onayı yapılır (betiğin başındaki açıklamaya bakın). Fork'lar `scripts/ExportOptions.plist` içindeki Team ID'yi değiştirmelidir.
+Birim testleri için `cd Packages/BoreasCore && swift test` çalıştırın. Sürüm DMG'si için `scripts/release.sh <sürüm> --skip-notarize` (deneme çalıştırması); bayrak olmadan `boreas-notary` notarytool anahtar zinciri profiliyle Apple onayı (notarization) alınır (betiğin başındaki açıklamaya bakın). Fork'lar `scripts/ExportOptions.plist` içindeki Team ID'yi değiştirmelidir.
 
 ## boreasctl
 
 `boreasctl`, aynı paketten derlenen, hata ayıklama ve donanım denemeleri için bir komut satırı aracıdır:
 
 ```sh
+swift build --package-path Packages/BoreasCore                          # Packages/BoreasCore/.build/debug/boreasctl dosyasını derler
 swift run --package-path Packages/BoreasCore boreasctl fans          # fan tablosu
 swift run --package-path Packages/BoreasCore boreasctl sensors       # sıcaklık sensörleri
 swift run --package-path Packages/BoreasCore boreasctl sensors --raw # katalogsuz: ham ad ve kimlik
 swift run --package-path Packages/BoreasCore boreasctl keys TC       # önekli SMC anahtarları
-sudo .build/debug/boreasctl set 0 3500 --hold 20   # fan 0'ı 20 sn sür, sonra Otomatik'e dön
-sudo .build/debug/boreasctl auto                   # tüm fanları Otomatik'e al
+sudo Packages/BoreasCore/.build/debug/boreasctl set 0 3500 --hold 20   # fan 0'ı 20 sn sür, sonra Otomatik'e dön
+sudo Packages/BoreasCore/.build/debug/boreasctl auto                   # tüm fanları Otomatik'e al
 ```
 
 Yazmak için root gerekir. `set`, süre dolunca ya da süreç kesilince fanı her zaman Otomatik'e geri verir.

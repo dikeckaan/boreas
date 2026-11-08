@@ -2,7 +2,10 @@
 # Packs Boreas.app into a styled drag-and-drop DMG (app on the left, /Applications shortcut on
 # the right, "Kutup Işığı" background with an arrow between them).
 #
-#   scripts/make-dmg.sh <Boreas.app> <version> <out.dmg>
+#   scripts/make-dmg.sh <Boreas.app> <version> <out.dmg> [--update-template]
+#
+# --update-template stores the .DS_Store of a successful Finder layout as scripts/dmg/DS_Store.template
+# (tracked). A normal build never rewrites that file.
 #
 # Uses only the macOS toolchain: hdiutil, osascript (Finder lays the window out), SetFile, tiffutil
 # and scripts/render-svg.swift. Layout: window 660x420, icon size 128, Boreas.app at (165,200),
@@ -18,10 +21,18 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
-[ $# -eq 3 ] || { echo "usage: scripts/make-dmg.sh <Boreas.app> <version> <out.dmg>" >&2; exit 2; }
-APP=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-VERSION=$2
-OUT=$3
+UPDATE_TEMPLATE=0
+POSITIONAL=()
+for a in "$@"; do
+  case "$a" in
+    --update-template) UPDATE_TEMPLATE=1 ;;
+    *) POSITIONAL+=("$a") ;;
+  esac
+done
+[ ${#POSITIONAL[@]} -eq 3 ] || { echo "usage: scripts/make-dmg.sh <Boreas.app> <version> <out.dmg> [--update-template]" >&2; exit 2; }
+APP=$(cd "$(dirname "${POSITIONAL[0]}")" && pwd)/$(basename "${POSITIONAL[0]}")
+VERSION=${POSITIONAL[1]}
+OUT=${POSITIONAL[2]}
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 [ -d "$APP" ] || { echo "error: $APP not found" >&2; exit 1; }
 
@@ -45,7 +56,7 @@ fi
 
 # --- 1. Background: PNG @1x/@2x rendered from the SVG, combined into a multi-resolution TIFF -----
 note "background"
-if [ ! -f "$DMG_DIR/background.png" ] || [ ! -f "$DMG_DIR/background@2x.png" ] || [ "$DMG_DIR/background.svg" -nt "$DMG_DIR/background.png" ]; then
+if [ ! -f "$DMG_DIR/background.png" ] || [ ! -f "$DMG_DIR/background@2x.png" ]; then  # tracked PNGs: delete them to re-render after editing the SVG
   swift "$ROOT/scripts/render-svg.swift" \
     "$DMG_DIR/background.svg" ${WIN_W}x${WIN_H} "$DMG_DIR/background.png" \
     "$DMG_DIR/background.svg" $((WIN_W*2))x$((WIN_H*2)) "$DMG_DIR/background@2x.png"
@@ -80,9 +91,9 @@ attach() { # attach <image> [extra args]; prints the device node
 }
 
 DEV=$(attach "$RW" -readwrite)
+trap 'hdiutil detach "$DEV" -force -quiet 2>/dev/null || true' EXIT
 MNT="/Volumes/$VOL"
 [ -d "$MNT" ] || { echo "error: $MNT did not mount" >&2; exit 1; }
-trap 'hdiutil detach "$DEV" -force -quiet 2>/dev/null || true' EXIT
 
 SetFile -a V "$MNT/.background" 2>/dev/null || true
 
@@ -126,8 +137,12 @@ if [ $OSA_STATUS -eq 0 ]; then
   sync; sleep 2
   if [ -s "$MNT/.DS_Store" ]; then
     LAYOUT=finder
-    cp "$MNT/.DS_Store" "$TEMPLATE"
-    note "Finder layout applied; .DS_Store saved to scripts/dmg/DS_Store.template for fallback"
+    if [ "$UPDATE_TEMPLATE" = 1 ]; then
+      cp "$MNT/.DS_Store" "$TEMPLATE"
+      note "Finder layout applied; .DS_Store saved to scripts/dmg/DS_Store.template"
+    else
+      note "Finder layout applied"
+    fi
   else
     warn "Finder reported success but wrote no .DS_Store"
   fi
@@ -171,6 +186,7 @@ fi
 note "verifying layout"
 DEV=$(attach "$OUT" -readonly)
 trap 'hdiutil detach "$DEV" -force -quiet 2>/dev/null || true' EXIT
+[ -d "$MNT" ] || { echo "error: $MNT did not mount" >&2; exit 1; }
 [ -f "$MNT/.background/background.tiff" ] && note "background.tiff present" || warn "background.tiff missing in the image"
 [ -f "$MNT/.VolumeIcon.icns" ] && note ".VolumeIcon.icns present" || warn ".VolumeIcon.icns missing in the image"
 if python3 -I -c 'import sys; d=open(sys.argv[1],"rb").read(); sys.exit(0 if (b"BKGD" in d or b"pBBk" in d) else 1)' "$MNT/.DS_Store"; then
