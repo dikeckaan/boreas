@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let log = Logger(subsystem: "com.kaandikec.boreas.helper", category: "runtime")
 
 /// The helper's control loop, client bookkeeping and safety resets, kept free of XPC and
 /// IOKit power APIs so it can be tested with a fake SMC and a fake clock.
@@ -11,6 +14,8 @@ public final class HelperRuntime: @unchecked Sendable {
     public static let disconnectGraceSeconds: TimeInterval = 3
     /// With no clients and no manual fan, the helper exits after this long.
     public static let idleExitSeconds: TimeInterval = 10
+    /// After a write to a fan fails, manual commands for that fan wait this long before being retried.
+    public static let writeFailureBackoffSeconds: TimeInterval = 30
 
     public static var bundleVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -27,6 +32,11 @@ public final class HelperRuntime: @unchecked Sendable {
     /// Last command successfully written per fan. A fan missing here has unknown state and
     /// is rewritten on the next control pass.
     private var applied: [Int: FanCommand] = [:]
+    /// Fans a reset to auto could not be confirmed for. Treated as manual (no idle exit) and
+    /// retried on every tick until the read-back says auto.
+    private var unverifiedFans: Set<Int> = []
+    /// Earliest time a manual command may be written again to a fan whose write failed.
+    private var backoffUntil: [Int: Date] = [:]
     public private(set) var clientCount = 0
     private var lastDisconnect: Date?
     private var asleep = false
@@ -41,7 +51,7 @@ public final class HelperRuntime: @unchecked Sendable {
         self.helperVersion = helperVersion
         self.startTime = now()
         // A previous helper instance may have died with a fan in manual mode.
-        fans.setAllAuto()
+        noteUnverified(fans.setAllAuto())
     }
 
     // MARK: - Client events
@@ -70,8 +80,10 @@ public final class HelperRuntime: @unchecked Sendable {
 
     // MARK: - Loop and system events
 
-    /// Called once a second: handles the disconnect grace period, then runs one control pass.
+    /// Called once a second: retries unverified resets, handles the disconnect grace period,
+    /// then runs one control pass.
     public func tick() {
+        retryUnverified()
         if clientCount == 0, configuration != nil || hasManualFan {
             let elapsed = now().timeIntervalSince(lastDisconnect ?? startTime)
             // A negative interval means the clock went backwards; err on the side of auto.
@@ -99,7 +111,7 @@ public final class HelperRuntime: @unchecked Sendable {
     }
 
     public var shouldExit: Bool {
-        clientCount == 0 && !hasManualFan
+        clientCount == 0 && !hasManualFan && unverifiedFans.isEmpty
             && now().timeIntervalSince(lastDisconnect ?? startTime) >= Self.idleExitSeconds
     }
 
@@ -107,12 +119,13 @@ public final class HelperRuntime: @unchecked Sendable {
         let t = now()
         let fresh = lastReadingsAt.map { abs(t.timeIntervalSince($0)) < 2 } ?? false
         let readings = fresh ? lastReadings : sensors.read()
-        let commands = applied.mapValues { c -> String in
+        var commands = applied.mapValues { c -> String in
             switch c {
             case .auto: return "auto"
             case .manual(let rpm): return "manual:\(Int(rpm.rounded()))"
             }
         }
+        for fan in unverifiedFans { commands[fan] = "unverified" }
         return HelperSnapshot(fans: (try? fanController.fans()) ?? [], sensors: readings, commands: commands,
                               ceilingTripped: engine.ceiling.tripped, helperVersion: helperVersion)
     }
@@ -129,8 +142,34 @@ public final class HelperRuntime: @unchecked Sendable {
 
     /// Fans back to auto; tracking cleared so the next control pass rewrites every fan.
     private func restoreAuto() {
-        fanController.setAllAuto(alsoFans: manualFans)
+        noteUnverified(fanController.setAllAuto(alsoFans: manualFans + unverifiedFans))
         applied = [:]
+    }
+
+    /// Records what `setAllAuto` could not confirm (it reports every such fan, so this replaces the set).
+    private func noteUnverified(_ fans: [Int]) {
+        unverifiedFans = Set(fans)
+        logUnverified()
+    }
+
+    private func logUnverified() {
+        guard !unverifiedFans.isEmpty else { return }
+        let list = unverifiedFans.sorted().map(String.init).joined(separator: ", ")
+        log.fault("fan(s) \(list, privacy: .public) could not be confirmed in automatic mode")
+    }
+
+    private func retryUnverified() {
+        guard !unverifiedFans.isEmpty else { return }
+        if hasManualFan {
+            // Other fans are under control: setAllAuto would knock them back to auto, so retry
+            // only the unverified fans and confirm by reading them back.
+            for fan in unverifiedFans { try? fanController.setAuto(fan: fan) }
+            let current = (try? fanController.fans()) ?? []
+            unverifiedFans = unverifiedFans.filter { fan in current.first { $0.index == fan }?.isManual != false }
+            logUnverified()
+        } else {
+            noteUnverified(fanController.setAllAuto(alsoFans: Array(unverifiedFans)))
+        }
     }
 
     private func dropConfiguration() {
@@ -159,30 +198,31 @@ public final class HelperRuntime: @unchecked Sendable {
         write(commands)
     }
 
-    /// Writes only commands that differ from what was last applied. A failed write sends that
-    /// fan (and, through `setAllAuto`, every fan) back to auto; the other fans are then rewritten.
+    /// Writes only commands that differ from what was last applied. If a write fails, only that
+    /// fan goes back to auto and its manual commands wait `writeFailureBackoffSeconds`; other fans
+    /// are left alone.
     private func write(_ commands: [Int: FanCommand]) {
-        var failed: Set<Int> = []
-        var retry = true
-        while retry {
-            retry = false
-            for fan in commands.keys.sorted() where !failed.contains(fan) {
-                let command = commands[fan]!
-                if applied[fan] == command { continue }
-                do {
-                    switch command {
-                    case .auto: try fanController.setAuto(fan: fan)
-                    case .manual(let rpm): try fanController.setManual(fan: fan, rpm: rpm)
-                    }
-                    applied[fan] = command
-                } catch {
-                    failed.insert(fan)
-                    fanController.setAllAuto(alsoFans: [fan])
-                    // setAllAuto touched every fan: only the failed ones are known to be auto.
-                    applied = Dictionary(uniqueKeysWithValues: failed.map { ($0, FanCommand.auto) })
-                    retry = true
-                    break
+        let t = now()
+        for fan in commands.keys.sorted() {
+            let command = commands[fan]!
+            if applied[fan] == command { continue }
+            if case .manual = command, let until = backoffUntil[fan], t < until { continue }
+            do {
+                switch command {
+                case .auto: try fanController.setAuto(fan: fan)
+                case .manual(let rpm): try fanController.setManual(fan: fan, rpm: rpm)
                 }
+                applied[fan] = command
+                backoffUntil[fan] = nil
+                unverifiedFans.remove(fan)
+            } catch {
+                log.fault("fan \(fan, privacy: .public) write failed: \(String(describing: error), privacy: .public)")
+                do { try fanController.setAuto(fan: fan) } catch {
+                    unverifiedFans.insert(fan)
+                    logUnverified()
+                }
+                applied[fan] = .auto
+                backoffUntil[fan] = t.addingTimeInterval(Self.writeFailureBackoffSeconds)
             }
         }
     }

@@ -22,8 +22,8 @@ private let messageSystemHasPoweredOn: UInt32 = 0xE000_0300
 /// The Info.plist linked into this executable's `__TEXT,__info_plist` section. Read directly:
 /// the helper lives in Boreas.app/Contents/MacOS, so `Bundle.main`'s URLs point at the app and
 /// the source of the Team ID should not depend on how Foundation resolves the main bundle.
-/// (`Bundle.main.resourceURL` being the app's Resources is what lets BoreasCore's `Bundle.module`
-/// find `BoreasCore_BoreasCore.bundle`.)
+/// (`Bundle.main.resourceURL` being the app's Resources is where `SensorCatalog.bundled()` finds
+/// `BoreasCore_BoreasCore.bundle`; if it is missing, the helper runs with an empty catalog.)
 private func embeddedInfoPlist() -> [String: Any] {
     var size: UInt = 0
     let header = #dsohandle.assumingMemoryBound(to: mach_header_64.self)
@@ -45,36 +45,32 @@ private func monotonicNow() -> Date {
     Date(timeIntervalSinceReferenceDate: Double(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)) / 1e9)
 }
 
-/// Invokes its action at most once, whichever of the invalidation/interruption handlers fires first.
-final class Once: @unchecked Sendable {
-    private let lock = NSLock()
-    private var fired = false
-    func callAsFunction() -> Bool {
-        lock.withLock {
-            defer { fired = true }
-            return !fired
-        }
-    }
-}
-
-/// Exported to each client connection. Hops onto the runtime queue for every call.
+/// Exported to each client connection. Every call hops onto the runtime queue and first tells
+/// the connection's tracker that a message arrived: a connection becomes a client only then,
+/// i.e. after XPC has checked the code-signing requirement.
 final class XPCHandler: NSObject, BoreasHelperXPC, @unchecked Sendable {
     private let queue: DispatchQueue
     private let runtime: HelperRuntime
+    private let tracker: ConnectionTracker
     private let version: String
 
-    init(queue: DispatchQueue, runtime: HelperRuntime, version: String) {
+    init(queue: DispatchQueue, runtime: HelperRuntime, tracker: ConnectionTracker, version: String) {
         self.queue = queue
         self.runtime = runtime
+        self.tracker = tracker
         self.version = version
     }
 
     func snapshot(reply: @escaping @Sendable (Data?) -> Void) {
-        queue.async { reply(try? JSONEncoder().encode(self.runtime.snapshot())) }
+        queue.async {
+            self.tracker.messageReceived()
+            reply(try? JSONEncoder().encode(self.runtime.snapshot()))
+        }
     }
 
     func apply(configuration: Data, reply: @escaping @Sendable (String?) -> Void) {
         queue.async {
+            self.tracker.messageReceived()
             do {
                 self.runtime.apply(try JSONDecoder().decode(HelperConfiguration.self, from: configuration))
                 reply(nil)
@@ -86,13 +82,17 @@ final class XPCHandler: NSObject, BoreasHelperXPC, @unchecked Sendable {
 
     func resetAllToAuto(reply: @escaping @Sendable () -> Void) {
         queue.async {
+            self.tracker.messageReceived()
             self.runtime.resetAllToAuto()
             reply()
         }
     }
 
     func version(reply: @escaping @Sendable (String) -> Void) {
-        reply(version)
+        queue.async {
+            self.tracker.messageReceived()
+            reply(self.version)
+        }
     }
 }
 
@@ -154,16 +154,13 @@ final class HelperService: NSObject, NSXPCListenerDelegate, @unchecked Sendable 
         guard let requirement else { return false }
         connection.setCodeSigningRequirement(requirement)
         connection.exportedInterface = NSXPCInterface(with: BoreasHelperXPC.self)
-        connection.exportedObject = XPCHandler(queue: queue, runtime: runtime, version: version)
-        let once = Once()
-        let ended: @Sendable () -> Void = { [queue, runtime] in
-            guard once() else { return }
-            queue.async { runtime.clientDisconnected() }
-        }
+        // Created here but only used on `queue`. It counts the client on the first message and
+        // un-counts it at most once, and only if it was counted.
+        let tracker = ConnectionTracker(runtime: runtime)
+        connection.exportedObject = XPCHandler(queue: queue, runtime: runtime, tracker: tracker, version: version)
+        let ended: @Sendable () -> Void = { [queue] in queue.async { tracker.connectionEnded() } }
         connection.invalidationHandler = ended
         connection.interruptionHandler = ended
-        // Enqueued before resume(), so it always precedes this connection's disconnect.
-        queue.async { [runtime] in runtime.clientConnected() }
         connection.resume()
         return true
     }
@@ -211,11 +208,18 @@ let helperVersion = info["CFBundleShortVersionString"] as? String ?? "0"
 let smc: IOKitSMCClient
 do { smc = try IOKitSMCClient() } catch {
     log.fault("cannot open AppleSMC: \(String(describing: error), privacy: .public)")
-    exit(1)
+    // exit(0): launchd's KeepAlive(SuccessfulExit=false) would otherwise respawn this every 10 s.
+    // The next client message launches the helper again on demand.
+    exit(0)
 }
 
+// Fans back to auto before anything else can go wrong (sensor setup included). HelperRuntime's
+// init does it again and records anything it cannot confirm.
+let fans = FanController(smc: smc)
+fans.setAllAuto()
+
 // Created before any event source exists; from here on only touched on service.queue.
-let runtime = HelperRuntime(fans: FanController(smc: smc), sensors: SensorReader.live(language: "en"),
+let runtime = HelperRuntime(fans: fans, sensors: SensorReader.live(language: "en"),
                             now: monotonicNow, helperVersion: helperVersion)
 let service = HelperService(runtime: runtime, version: helperVersion,
                             requirement: clientRequirement(teamID: info["BoreasTeamID"] as? String))

@@ -68,8 +68,9 @@ targets:
         codeSign: false
         copy:
           destination: executables
-      # Also embeds BoreasCore_BoreasCore.bundle (sensor catalog) in Contents/Resources. The
-      # helper relies on it: its Bundle.module looks in Bundle.main.resourceURL, i.e. the app's.
+      # Also embeds BoreasCore_BoreasCore.bundle (sensor catalog) in Contents/Resources, where the
+      # helper's SensorCatalog.bundled() finds it (Bundle.main.resourceURL is the app's). Without it
+      # the helper falls back to an empty catalog and logs a fault.
       - package: BoreasCore
         product: BoreasCore
     info:

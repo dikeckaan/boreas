@@ -20,6 +20,10 @@ private func entry(_ m: String, _ en: String, group: SensorGroup = .cpu, point: 
   #expect(r.first?.group == .other); #expect(r.first?.name == "TZZZ") }
 @Test func invalidReadingsDropped() { let r = SensorReader(sources: [StubSource([("smc:TA0P", "TA0P", .nan)])], catalog: .init(entries: []), language: "en").read(); #expect(r.isEmpty) }
 @Test func bundledCatalogDecodes() throws { #expect(try SensorCatalog.bundled().entries.count > 0) }
+@Test func missingCatalogBundleThrowsInsteadOfTrapping() {
+  #expect(throws: CocoaError.self) { try SensorCatalog.bundled(searching: []) }
+  #expect(throws: CocoaError.self) { try SensorCatalog.bundled(searching: [URL(fileURLWithPath: "/nonexistent")]) }
+}
 
 @Test func starMatchesAndFirstWins() {
   let c = SensorCatalog(entries: [entry("smc:Tp0*", "A"), entry("smc:Tp*", "B")])

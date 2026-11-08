@@ -75,11 +75,26 @@ public struct SensorCatalog: @unchecked Sendable {
         return nil
     }
 
-    public static func bundled() throws -> SensorCatalog {
-        guard let url = Bundle.module.url(forResource: "sensor-catalog", withExtension: "json") else {
+    /// Directories that may hold `BoreasCore_BoreasCore.bundle`:
+    /// - an app's Resources (also BoreasHelper, whose `Bundle.main` is the enclosing Boreas.app);
+    /// - next to a command-line tool;
+    /// - next to the test bundle under `swift test`.
+    public static var defaultBundleSearchPaths: [URL?] {
+        let code = Bundle(for: BundleToken.self)
+        return [Bundle.main.resourceURL, code.resourceURL, Bundle.main.bundleURL,
+                Bundle.main.executableURL?.deletingLastPathComponent(), code.bundleURL.deletingLastPathComponent()]
+    }
+
+    /// Loads the catalog shipped with BoreasCore. Searches for the resource bundle explicitly instead of
+    /// using `Bundle.module`, whose generated accessor calls `fatalError` when the bundle is missing.
+    public static func bundled(searching paths: [URL?] = defaultBundleSearchPaths) throws -> SensorCatalog {
+        let bundle = paths.lazy.compactMap { $0.flatMap { Bundle(url: $0.appendingPathComponent("BoreasCore_BoreasCore.bundle")) } }.first
+        guard let url = bundle?.url(forResource: "sensor-catalog", withExtension: "json") else {
             throw CocoaError(.fileNoSuchFile)
         }
         let entries = try JSONDecoder().decode([CatalogEntry].self, from: Data(contentsOf: url))
         return SensorCatalog(entries: entries)
     }
 }
+
+private final class BundleToken {}

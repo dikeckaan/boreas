@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public final class SensorReader: @unchecked Sendable {
     private let sources: [SensorSource]
@@ -17,7 +18,12 @@ public final class SensorReader: @unchecked Sendable {
         var sources: [SensorSource] = []
         if let smc = try? IOKitSMCClient() { sources.append(SMCSensorSource(smc: smc)) }
         sources.append(HIDSensorSource())
-        let catalog = (try? SensorCatalog.bundled()) ?? SensorCatalog(entries: [])
+        let catalog: SensorCatalog
+        do { catalog = try SensorCatalog.bundled() } catch {
+            Logger(subsystem: "com.kaandikec.boreas", category: "sensors")
+                .fault("sensor catalog not found, using an empty one: \(String(describing: error), privacy: .public)")
+            catalog = SensorCatalog(entries: [])
+        }
         return SensorReader(sources: sources, catalog: catalog, language: language)
     }
 
