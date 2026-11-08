@@ -94,12 +94,6 @@ public enum ControlEngine {
     }
 
     private static func temperature(for source: SensorSourceRef, readings: [SensorReading]) -> Double? {
-        switch source {
-        case .sensor(let id):
-            return readings.first { $0.id == id && SensorReader.isValid($0.celsius) }?.celsius
-        case .group(let g):
-            return readings.filter { $0.group == g && !$0.suspect && SensorReader.isValid($0.celsius) }
-                .map(\.celsius).max()
-        }
+        source.temperature(in: readings)
     }
 }

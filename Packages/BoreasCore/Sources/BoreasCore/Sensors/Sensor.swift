@@ -5,7 +5,8 @@ public enum SensorGroup: String, Codable, CaseIterable, Sendable {
 }
 
 /// `"smc:TC0P"` or `"hid:PMU tdie1"`.
-public struct SensorID: Hashable, Codable, Sendable, RawRepresentable {
+/// Also `CodingKeyRepresentable`, so `[SensorID: T]` encodes as a JSON object keyed by the raw id.
+public struct SensorID: Hashable, Codable, Sendable, RawRepresentable, CodingKeyRepresentable {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
     public init(_ rawValue: String) { self.rawValue = rawValue }

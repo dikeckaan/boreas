@@ -1,9 +1,54 @@
 import Foundation
 
 /// Rule input: one sensor, or a group (the highest non-`suspect` member).
+///
+/// Persisted (and sent to the helper) as `{"kind":"sensor"|"group","value":"<sensor id or group>"}`.
 public enum SensorSourceRef: Codable, Hashable, Sendable {
     case sensor(SensorID)
     case group(SensorGroup)
+
+    private enum CodingKeys: String, CodingKey { case kind, value }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(String.self, forKey: .kind)
+        let value = try c.decode(String.self, forKey: .value)
+        switch kind {
+        case "sensor":
+            self = .sensor(SensorID(value))
+        case "group":
+            guard let g = SensorGroup(rawValue: value) else {
+                throw DecodingError.dataCorruptedError(forKey: .value, in: c, debugDescription: "Unknown sensor group \(value)")
+            }
+            self = .group(g)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "Unknown source kind \(kind)")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .sensor(let id):
+            try c.encode("sensor", forKey: .kind)
+            try c.encode(id.rawValue, forKey: .value)
+        case .group(let g):
+            try c.encode("group", forKey: .kind)
+            try c.encode(g.rawValue, forKey: .value)
+        }
+    }
+
+    /// The source's temperature: the sensor's value, or the highest valid non-`suspect` group
+    /// member. nil when nothing valid matches.
+    public func temperature(in readings: [SensorReading]) -> Double? {
+        switch self {
+        case .sensor(let id):
+            return readings.first { $0.id == id && SensorReader.isValid($0.celsius) }?.celsius
+        case .group(let g):
+            return readings.filter { $0.group == g && !$0.suspect && SensorReader.isValid($0.celsius) }
+                .map(\.celsius).max()
+        }
+    }
 }
 
 public struct Rule: Codable, Equatable, Sendable, Identifiable {
@@ -25,6 +70,17 @@ public struct ProfileBehavior: Codable, Equatable, Sendable {
         self.smoothing = smoothing
         self.hysteresisC = hysteresisC
         self.releaseToAppleBelowMin = releaseToAppleBelowMin
+    }
+
+    private enum CodingKeys: String, CodingKey { case smoothing, hysteresisC, releaseToAppleBelowMin }
+
+    /// Missing keys take their defaults, so adding a field later does not invalidate saved profiles.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = ProfileBehavior()
+        smoothing = try c.decodeIfPresent(Bool.self, forKey: .smoothing) ?? d.smoothing
+        hysteresisC = try c.decodeIfPresent(Double.self, forKey: .hysteresisC) ?? d.hysteresisC
+        releaseToAppleBelowMin = try c.decodeIfPresent(Bool.self, forKey: .releaseToAppleBelowMin) ?? d.releaseToAppleBelowMin
     }
 }
 

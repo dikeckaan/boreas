@@ -1,0 +1,315 @@
+import AppKit
+import BoreasCore
+import SwiftUI
+
+// MARK: - Menu bar label
+
+struct MenuBarLabel: View {
+    let model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            // Placeholder glyph until Task 10 adds the template MenuBarIcon asset.
+            Image(systemName: "fan")
+            if let text = model.menuBarText {
+                Text(text).monospacedDigit()
+            }
+        }
+    }
+}
+
+extension AppModel {
+    /// Text next to the menu bar icon, per `menuBarDisplay`; nil for icon only or no data yet.
+    var menuBarText: String? {
+        guard let snapshot else { return nil }
+        let temperature = settings.menuBarSensor.temperature(in: snapshot.sensors)
+            .map { Format.temperature($0, unit: settings.unit) }
+        let rpm = snapshot.fans.map(\.actual).filter(\.isFinite).max().map(Format.rpm)
+        let parts: [String?]
+        switch settings.menuBarDisplay {
+        case .iconOnly: parts = []
+        case .temperature: parts = [temperature]
+        case .fanSpeed: parts = [rpm]
+        case .both: parts = [temperature, rpm]
+        }
+        let text = parts.compactMap { $0 }.joined(separator: " · ")
+        return text.isEmpty ? nil : text
+    }
+}
+
+// MARK: - Panel
+
+/// The window that opens from the menu bar icon (approved mockup, left part).
+struct MenuBarPanel: View {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if model.hasFans {
+                SectionHeader("Profile")
+                profileSection
+                SectionHeader("Fans")
+                ForEach(model.fans, id: \.index) { fan in
+                    FanRow(model: model, fan: fan)
+                }
+                if model.snapshot?.ceilingTripped == true {
+                    Label("Safety: full speed", systemImage: "flame.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                }
+            } else if model.fanCount == 0 {
+                SectionHeader("Fans")
+                PanelRow { Text("This Mac has no fans").foregroundStyle(.secondary) }
+            }
+
+            SectionHeader("Hottest 3")
+            let hottest = model.settings.sensorPrefs.hottest(model.snapshot?.sensors ?? [], count: 3)
+            if hottest.isEmpty {
+                PanelRow { Text("No sensor readings yet").foregroundStyle(.secondary) }
+            }
+            ForEach(hottest, id: \.id) { r in
+                PanelRow {
+                    Text(model.settings.sensorPrefs.displayName(r)).lineLimit(1)
+                    Spacer()
+                    Text(Format.temperature(r.celsius, unit: model.settings.unit)).monospacedDigit()
+                }
+            }
+
+            Divider().padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                PanelButton("Open Window…") { showMainWindow() }
+                    .foregroundStyle(Color.accentColor)
+                PanelButton("Quit Boreas") { NSApp.terminate(nil) }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(width: 280)
+    }
+
+    @ViewBuilder
+    private var profileSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FlowLayout(spacing: 4) {
+                ForEach(model.settings.profiles) { p in
+                    ProfilePill(title: p.displayName, selected: p.id == model.settings.activeProfileID) {
+                        model.selectProfile(p.id)
+                    }
+                }
+            }
+            .disabled(!model.canControlFans)
+            if !model.canControlFans {
+                Button {
+                    showMainWindow()
+                } label: {
+                    Label(model.helperStatus == .unavailable ? "Fan control unavailable" : "Set up fan control…",
+                          systemImage: "exclamationmark.circle")
+                }
+                .buttonStyle(.link)
+                .font(.callout)
+            } else if let error = model.helperProblem {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+    }
+
+    private func showMainWindow() {
+        openWindow(id: "main")
+        NSApp.activate()
+        dismiss()
+    }
+}
+
+private struct FanRow: View {
+    let model: AppModel
+    let fan: FanInfo
+
+    var body: some View {
+        PanelRow {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(Format.fanName(fan.index, count: model.fans.count))
+                    if case .fixed = model.mode(of: fan.index) {
+                        Text("Fixed")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                }
+                if model.snapshot?.commands[fan.index] == "unverified" {
+                    Label("Couldn't confirm Automatic", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            Spacer()
+            Text(Format.rpmWithUnit(fan.actual)).monospacedDigit()
+        }
+    }
+}
+
+// MARK: - Building blocks
+
+private struct SectionHeader: View {
+    let title: LocalizedStringKey
+    init(_ title: LocalizedStringKey) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .textCase(.uppercase)
+            .font(.caption2.weight(.medium))
+            .kerning(0.6)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+    }
+}
+
+private struct PanelRow<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack { content }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+    }
+}
+
+private struct PanelButton: View {
+    let title: LocalizedStringKey
+    let action: () -> Void
+    @State private var hovering = false
+
+    init(_ title: LocalizedStringKey, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(hovering ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 5))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct ProfilePill: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.callout)
+                .lineLimit(1)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .background(selected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary),
+                            in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Lays children out left to right, wrapping onto new lines.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map { $0.width }.max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(Swift.max(0, rows.count - 1))
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for i in row.indices {
+                let size = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for (i, view) in subviews.enumerated() {
+            let size = view.sizeThatFits(.unspecified)
+            let needed = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            if !row.indices.isEmpty, needed > width {
+                rows.append(row)
+                row = Row()
+            }
+            row.width = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            row.height = Swift.max(row.height, size.height)
+            row.indices.append(i)
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
+    }
+}
+
+// MARK: - Formatting
+
+extension Profile {
+    /// Built-in names are localized keys; user profiles show their own name.
+    var displayName: String {
+        switch builtIn {
+        case .automatic: String(localized: "Automatic")
+        case .silent: String(localized: "Silent")
+        case .performance: String(localized: "Performance")
+        case nil: name
+        }
+    }
+}
+
+/// Interim formatting for the menu bar; Task 8 adds `SensorPresentation` for the main window.
+enum Format {
+    static func temperature(_ celsius: Double, unit: TemperatureUnit) -> String {
+        let value = unit == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
+        guard value.isFinite else { return "–" }
+        return "\(Int(value.rounded()))°"
+    }
+
+    static func rpm(_ value: Double) -> String {
+        guard value.isFinite else { return "–" }
+        return Int(value.rounded()).formatted()
+    }
+
+    static func rpmWithUnit(_ value: Double) -> String {
+        String(localized: "\(rpm(value)) rpm")
+    }
+
+    static func fanName(_ index: Int, count: Int) -> String {
+        count == 1 ? String(localized: "Fan") : String(localized: "Fan \(index + 1)")
+    }
+}

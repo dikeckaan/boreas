@@ -32,6 +32,28 @@ let silent = Curve(points: [.init(celsius: 55, fraction: 0), .init(celsius: 95, 
 @Test func sensorRefRoundTrip() throws {
     let r = Rule(id: UUID(), source: .sensor(SensorID("smc:TCMb")), curve: silent)
     #expect(try JSONDecoder().decode(Rule.self, from: JSONEncoder().encode(r)) == r)
+    for ref in [SensorSourceRef.sensor(SensorID("hid:PMU tdie1")), .group(.gpu)] {
+        #expect(try JSONDecoder().decode(SensorSourceRef.self, from: JSONEncoder().encode(ref)) == ref)
+    }
+}
+@Test func sensorRefJSONShape() throws {
+    func json(_ ref: SensorSourceRef) throws -> [String: String]? {
+        try JSONSerialization.jsonObject(with: JSONEncoder().encode(ref)) as? [String: String]
+    }
+    #expect(try json(.group(.cpu)) == ["kind": "group", "value": "cpu"])
+    #expect(try json(.sensor(SensorID("smc:TC0P"))) == ["kind": "sensor", "value": "smc:TC0P"])
+    let decoded = try JSONDecoder().decode(SensorSourceRef.self, from: Data(#"{"kind":"group","value":"gpu"}"#.utf8))
+    #expect(decoded == .group(.gpu))
+}
+@Test func sensorRefRejectsUnknownShapes() {
+    for bad in [#"{"kind":"group","value":"toaster"}"#, #"{"kind":"blob","value":"x"}"#, #"{"group":{"_0":"cpu"}}"#] {
+        #expect(throws: DecodingError.self) { try JSONDecoder().decode(SensorSourceRef.self, from: Data(bad.utf8)) }
+    }
+}
+@Test func behaviorMissingKeysDecode() throws {
+    let b = try JSONDecoder().decode(ProfileBehavior.self, from: Data(#"{"hysteresisC":5}"#.utf8))
+    #expect(b == ProfileBehavior(smoothing: true, hysteresisC: 5, releaseToAppleBelowMin: false))
+    #expect(try JSONDecoder().decode(ProfileBehavior.self, from: Data("{}".utf8)) == ProfileBehavior())
 }
 @Test func malformedCurves() {
     #expect(Curve(points: []).fraction(at: 50) == 0)
