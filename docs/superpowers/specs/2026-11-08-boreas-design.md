@@ -1,6 +1,6 @@
 # Boreas: Tasarım Dokümanı
 
-Tarih: 2026-11-08 · Durum: kullanıcı onayı bekliyor
+Tarih: 2026-11-08 · Durum: onaylandı (2026-11-08)
 
 Boreas, Apple Silicon Mac'ler için tamamen ücretsiz ve açık kaynak bir fan kontrol ve sıcaklık izleme uygulamasıdır. Macs Fan Control'ün yaptığı işi yapar; ücretli sürümde kilitli olan özel fan profilleri burada herkese açıktır.
 
