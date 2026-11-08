@@ -17,9 +17,7 @@ Screenshots (coming): main window, menu bar panel, profile editor. They will liv
 
 ## Install
 
-> **Pre-release:** there is no published, notarized release yet. Until the first GitHub release exists, build from source (below). The release DMG will contain a notarized and stapled app; the DMG itself is not code-signed unless the maintainer's machine has a Developer ID identity.
-
-1. Download `Boreas-<version>.dmg` from the Releases page and open it.
+1. Download `Boreas-<version>.dmg` from the [Releases page](https://github.com/dikeckaan/boreas/releases/latest) and open it. The app inside is signed with Developer ID and notarized by Apple.
 2. Drag **Boreas** onto **Applications**, then open it from there.
 3. Boreas needs a small root helper to write fan speeds. Press **Install Helper** on the welcome screen, then open **System Settings → General → Login Items & Extensions** and switch on **Boreas** under **Allow in the Background**. This approval is needed once; a small guide panel points to the switch.
 
@@ -27,16 +25,16 @@ Remove the helper any time from Boreas → Settings → **Remove**.
 
 ## Safety
 
-Boreas never leaves a fan stuck in manual mode. These rules cannot be switched off. Hardware status as of 2026-11-08 (details in [docs/manual-test-checklist.md](docs/manual-test-checklist.md)):
+Boreas never leaves a fan stuck in manual mode. These rules cannot be switched off. Hardware status as of 2026-11-08, on the notarized release build (details in [docs/manual-test-checklist.md](docs/manual-test-checklist.md)):
 
-1. If the app quits, crashes or is killed, the helper puts all fans back on Automatic within a few seconds. *Verified on hardware: `kill -9` → Automatic in 3 s, Quit → Automatic in 1 s.*
+1. If the app quits, crashes or is killed, the helper puts all fans back on Automatic within a few seconds. *Verified on hardware: `kill -9` → Automatic in 3–4 s, Quit → Automatic in 1 s.*
 2. Before sleep the fans go to Automatic; after wake the active profile is re-applied if the app is running. *Unit-tested; sleep/wake not yet verified on hardware.*
 3. When the helper itself stops (SIGTERM, removal, update), fans go to Automatic. *Unit-tested; SIGTERM not yet verified on hardware.*
 4. If a sensor cannot be read or reports a nonsense value (NaN, 0, above 150 °C), rules that depend on it are ignored; with no valid rule left, the fan returns to Automatic. *Unit-tested.*
 5. A critical-temperature ceiling watches a fixed set of CPU and GPU safety sensors. If their 5-second average passes 100 °C, the fan goes to maximum whatever the profile says, until the average drops below 90 °C. You cannot hide these sensors from it. If neither these sensors nor a CPU/GPU fallback give a valid reading for more than 5 seconds, every fan under Boreas's control goes back to Automatic until they do; a helper that cannot load its sensor catalog refuses manual control altogether. *Unit-tested; not yet verified under real load.*
 6. Fixed speeds are clamped to the fan's real minimum and maximum. *Unit-tested.*
 
-Also verified on hardware: the helper exits by itself when idle, a relaunched app re-applies the profile, and the `boreasctl set` write gate returns the fan to Automatic. Not yet verified: that an unauthorized client cannot talk to the helper.
+Also verified on hardware: the helper exits by itself when idle, a relaunched app re-applies the profile, and the `boreasctl set` write gate returns the fan to Automatic. An unauthorized (ad-hoc signed) client is rejected by the helper — verified on hardware.
 
 ## Tested hardware
 
@@ -62,7 +60,7 @@ open Boreas.xcodeproj
 DEVELOPMENT_TEAM = XXXXXXXXXX
 ```
 
-Run the unit tests with `cd Packages/BoreasCore && swift test`. Build a release DMG with `scripts/release.sh <version> --skip-notarize` (a dry run; without the flag it notarizes with the `boreas-notary` notarytool keychain profile, see the script header).
+Run the unit tests with `cd Packages/BoreasCore && swift test`. Build a release DMG with `scripts/release.sh <version>`. It notarizes with the `boreas-notary` notarytool keychain profile if you have one, otherwise through the Apple ID signed in to Xcode (no password needed). `--skip-notarize` makes a dry run; see the script header.
 
 ### Forking
 

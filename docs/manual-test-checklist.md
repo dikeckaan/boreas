@@ -23,7 +23,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 - ☐ Rule 4: quit Boreas, edit `~/Library/Application Support/Boreas/settings.json` so the only rule of a custom profile reads `"source":{"kind":"sensor","value":"smc:ZZZZ"}` (a sensor this Mac does not have), relaunch, make that profile active with the fan on Profile → within 2 s the fan is on Automatic (`boreasctl fans` agrees) and the editor shows the rule's source as "(missing) smc:ZZZZ".
 - ☐ Rule 5: with the fan on a low fixed speed under heavy CPU+GPU load, the safety-sensor average passes 100 °C → fan goes to max, and returns to the profile once the average is below 90 °C.
 - ☐ Rule 6: set a fixed speed outside the fan's range (drag the slider to both ends) → the value is clamped to the fan's real min–max.
-- ☐ Authorization: run an ad-hoc-signed test client (different identity than Boreas) that connects to the helper's Mach service → the connection is rejected; the fan state is unchanged.
+- ✅ 2026-11-08 Authorization: run an ad-hoc-signed test client (different identity than Boreas) that connects to the helper's Mach service → the connection is rejected; the fan state is unchanged. (Result: "Couldn't communicate with a helper application"; fan stayed Automatic.)
 
 ## Install and service
 
@@ -69,7 +69,8 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 
 ## Release package
 
-- ☐ Release gate: install from the exported DMG build (not Debug), Install Helper, approve, run a profile, `kill -9` the app → Automatic; Quit → Automatic.
+- ✅ 2026-11-08 Release gate: install from the exported DMG build (not Debug), Install Helper, approve, run a profile, `kill -9` the app → Automatic; Quit → Automatic. (Result: Performance ~2300 rpm; kill -9 → Automatic in 4 s; Quit → Automatic in 1 s. After switching from a Debug-signed install, launchd kept a Development launch constraint; the app detected the unreachable helper and re-registered it once automatically.)
+- ✅ 2026-11-08 Notarization: the v0.1.0 app was notarized through the Xcode account; a quarantined copy taken from the DMG is accepted by Gatekeeper (`source=Notarized Developer ID`).
 
 - ☐ `scripts/release.sh <version>` (with notary credentials) finishes; the Gatekeeper check on a quarantined copy of the app taken from the DMG reports `accepted` (`spctl -a -vv -t exec`).
 - ☐ Only when the build machine has a local Developer ID Application identity: the DMG is signed, notarized and stapled, and `spctl -a -vv -t install Boreas-<version>.dmg` reports `accepted`. Without that identity the DMG is intentionally unsigned and carries the notarized, stapled app.

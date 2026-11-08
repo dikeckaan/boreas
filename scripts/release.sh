@@ -12,10 +12,11 @@
 # The DMG is signed, notarized and stapled only when a local "Developer ID Application" identity exists.
 # Otherwise it ships unsigned and Gatekeeper's verdict comes from the notarized + stapled app inside.
 #
-# Everything lands under build/release/ (gitignored). Notarization uses the keychain profile
-# "boreas-notary"; create it once with:
-#
-#   xcrun notarytool store-credentials boreas-notary
+# Everything lands under build/release/ (gitignored). Notarization uses the notarytool keychain
+# profile "boreas-notary" when it exists (create it with `xcrun notarytool store-credentials
+# boreas-notary`). Without it, the app is notarized through the Apple ID signed in to Xcode
+# (Settings > Accounts): `xcodebuild -exportArchive` with destination "upload", then
+# `xcodebuild -exportNotarizedApp`. No password is needed on that path.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -24,6 +25,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 PROFILE=boreas-notary
+NOTARY_MODE=none
 VERSION=""
 SKIP_NOTARIZE=0
 PUBLISH=0
@@ -31,7 +33,7 @@ for arg in "$@"; do
   case "$arg" in
     --skip-notarize) SKIP_NOTARIZE=1 ;;
     --publish) PUBLISH=1 ;;
-    -h|--help) sed -n 2,13p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,19p "$0"; exit 0 ;;
     -*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) [ -z "$VERSION" ] && VERSION="$arg" || { echo "unexpected argument: $arg" >&2; exit 2; } ;;
   esac
@@ -83,17 +85,13 @@ BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
 if [ "$SKIP_NOTARIZE" = 1 ]; then
   warn "DRY RUN (--skip-notarize): nothing is sent to Apple. The app and DMG will NOT pass Gatekeeper and must not be distributed."
 else
-  step "Checking notarytool credentials"
-  if ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
-    cat >&2 <<MSG
-error: the notarytool keychain profile "$PROFILE" is missing or invalid.
-Create it once (Apple ID, app-specific password and Team ID are entered by you):
-
-    xcrun notarytool store-credentials $PROFILE
-
-or run this script with --skip-notarize for a dry run.
-MSG
-    exit 1
+  step "Checking notarization method"
+  if xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
+    NOTARY_MODE=profile
+    echo "notarytool keychain profile \"$PROFILE\" found"
+  else
+    NOTARY_MODE=xcode
+    echo "no notarytool profile \"$PROFILE\": notarizing through the Apple ID signed in to Xcode"
   fi
 fi
 
@@ -145,11 +143,34 @@ echo "$SIGN_INFO" | grep -q 'Authority=Developer ID Application' || { echo "erro
 
 if [ "$SKIP_NOTARIZE" = 1 ]; then
   step "6/9 notarize + staple app: SKIPPED (--skip-notarize)"
-else
-  step "6/9 notarize app"
+elif [ "$NOTARY_MODE" = profile ]; then
+  step "6/9 notarize app (notarytool)"
   ditto -c -k --keepParent "$APP" "$ZIP"
   notarize "$ZIP"
   xcrun stapler staple "$APP"
+  xcrun stapler validate "$APP"
+else
+  step "6/9 notarize app (Xcode account)"
+  UPLOAD_PLIST="$OUT/ExportOptions-upload.plist"
+  cp "$ROOT/scripts/ExportOptions.plist" "$UPLOAD_PLIST"
+  plutil -insert destination -string upload "$UPLOAD_PLIST"
+  logged xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$OUT/upload" \
+    -exportOptionsPlist "$UPLOAD_PLIST" -allowProvisioningUpdates
+  echo "uploaded; waiting for Apple (up to 30 minutes)"
+  NOTARIZED="$OUT/notarized"
+  for attempt in $(seq 1 90); do
+    if xcodebuild -exportNotarizedApp -archivePath "$ARCHIVE" -exportPath "$NOTARIZED" \
+        -allowProvisioningUpdates >>"$LOG" 2>&1; then
+      break
+    fi
+    if tail -n 20 "$LOG" | grep -qiE 'invalid|rejected'; then
+      echo "error: Apple rejected the upload. Last lines of $LOG:" >&2; tail -n 40 "$LOG" >&2; exit 1
+    fi
+    [ "$attempt" = 90 ] && { echo "error: notarization did not finish in 30 minutes" >&2; tail -n 20 "$LOG" >&2; exit 1; }
+    sleep 20
+  done
+  APP="$NOTARIZED/Boreas.app"
+  [ -d "$APP" ] || { echo "error: -exportNotarizedApp did not produce $APP" >&2; exit 1; }
   xcrun stapler validate "$APP"
 fi
 
@@ -163,6 +184,8 @@ if [ -n "$DMG_IDENTITY" ]; then
   codesign --verify --verbose=2 "$DMG"
   if [ "$SKIP_NOTARIZE" = 1 ]; then
     echo "Notarize + staple DMG: SKIPPED (--skip-notarize)"
+  elif [ "$NOTARY_MODE" != profile ]; then
+    echo "Notarize + staple DMG: SKIPPED (needs the notarytool profile; the app inside is notarized)"
   else
     notarize "$DMG"
     xcrun stapler staple "$DMG"
@@ -175,7 +198,7 @@ fi
 
 step "9/9 Gatekeeper assessment"
 if [ -n "$DMG_IDENTITY" ]; then
-  if [ "$SKIP_NOTARIZE" = 1 ]; then
+  if [ "$SKIP_NOTARIZE" = 1 ] || [ "$NOTARY_MODE" != profile ]; then
     set +e; spctl -a -vv -t install "$DMG"; echo "spctl (dmg) exit: $?"; set -e
   else
     spctl -a -vv -t install "$DMG"
