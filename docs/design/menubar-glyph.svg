@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
+  <!-- Boreas menu bar glyph: single-colour three-blade fan around a hub ring, transparent
+       background, 18x18 pt. Used as a template image (macOS tints it for light and dark menu bars).
+       The blades stop short of the hub, leaving a thin gap so the ring and its hole stay visible. -->
+  <defs>
+    <mask id="gap" maskUnits="userSpaceOnUse" x="0" y="0" width="18" height="18">
+      <rect width="18" height="18" fill="#fff"/>
+      <circle cx="9" cy="9" r="3.35" fill="#000"/>
+    </mask>
+    <path id="b" d="M512 512 C 404 448, 366 270, 488 160 C 574 84, 732 128, 732 246 C 732 380, 610 466, 512 512 Z"/>
+  </defs>
+  <g fill="#000">
+    <g mask="url(#gap)">
+      <g transform="translate(9 9) scale(0.0215) translate(-512 -512)">
+        <use href="#b"/>
+        <use href="#b" transform="rotate(120 512 512)"/>
+        <use href="#b" transform="rotate(240 512 512)"/>
+      </g>
+    </g>
+    <path fill-rule="evenodd" d="M9 6.45 A2.55 2.55 0 1 1 8.999 6.45 Z M9 7.8 A1.2 1.2 0 1 0 9.001 7.8 Z"/>
+  </g>
+</svg>

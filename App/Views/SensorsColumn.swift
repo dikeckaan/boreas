@@ -35,7 +35,11 @@ struct SensorsColumn: View {
                         expanded.toggle()
                     } label: {
                         HStack {
-                            Text(expanded ? "Show fewer sensors" : "+\(extra) more sensors")
+                            if expanded {
+                                Text("Show fewer sensors")
+                            } else {
+                                Text("+\(extra) more sensors")
+                            }
                             Spacer()
                             Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         }
@@ -50,8 +54,14 @@ struct SensorsColumn: View {
                     Button {
                         showHidden.toggle()
                     } label: {
-                        Text(showHidden ? "Hide hidden sensors" : "Show hidden sensors (\(hidden.count))")
-                            .font(.callout)
+                        Group {
+                            if showHidden {
+                                Text("Hide hidden sensors")
+                            } else {
+                                Text("Show hidden sensors (\(hidden.count))")
+                            }
+                        }
+                        .font(.callout)
                     }
                     .buttonStyle(.link)
                     .padding(.top, 10)
@@ -92,12 +102,20 @@ struct SensorsColumn: View {
         .opacity(hidden ? 0.55 : 1)
         .contentShape(Rectangle())
         .contextMenu {
-            Button(starred ? "Unstar" : "Star") { model.toggleStar(r.id) }
+            if starred {
+                Button("Unstar") { model.toggleStar(r.id) }
+            } else {
+                Button("Star") { model.toggleStar(r.id) }
+            }
             Button("Rename…") {
                 newName = prefs.renamed[r.id] ?? ""
                 renaming = r
             }
-            Button(hidden ? "Unhide" : "Hide") { model.setHidden(r.id, !hidden) }
+            if hidden {
+                Button("Unhide") { model.setHidden(r.id, false) }
+            } else {
+                Button("Hide") { model.setHidden(r.id, true) }
+            }
         }
     }
 

@@ -44,7 +44,7 @@ struct HistoryChart: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(model.settings.historyCollapsed ? "Show history" : "Hide history")
+                .accessibilityLabel(model.settings.historyCollapsed ? Text("Show history") : Text("Hide history"))
                 Spacer()
                 if !model.settings.historyCollapsed {
                     Picker("Range", selection: $range) {
@@ -126,7 +126,7 @@ struct HistoryChart: View {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine()
                 AxisValueLabel {
-                    if let v = value.as(Double.self) { Text("\(Int(v.rounded()))°") }
+                    if let v = value.as(Double.self) { Text(verbatim: "\(Int(v.rounded()))°") }
                 }
             }
             if model.hasFans {

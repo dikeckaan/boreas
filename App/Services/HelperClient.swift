@@ -13,7 +13,8 @@ enum HelperClientError: LocalizedError {
         switch self {
         case .timedOut: String(localized: "The helper did not answer in time.")
         case .badReply: String(localized: "The helper sent an unreadable reply.")
-        case .helper(let message): message
+        // The helper's own message is English and technical; it is logged by the caller.
+        case .helper: String(localized: "The helper did not accept the settings.")
         }
     }
 }

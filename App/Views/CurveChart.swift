@@ -56,7 +56,7 @@ struct CurveChart: View {
         if let r = fanRange {
             return Format.rpmWithUnit(r.lowerBound + fraction * (r.upperBound - r.lowerBound))
         }
-        return "\(Int((fraction * 100).rounded()))%"
+        return fraction.formatted(.percent.precision(.fractionLength(0)))
     }
 
     var body: some View {
@@ -86,7 +86,7 @@ struct CurveChart: View {
                         .foregroundStyle(selected.color)
                         .annotation(position: .top, spacing: 4) {
                             if drag?.index == i {
-                                Text("\(SensorPresentation.format(p.celsius, unit: unit)), \(fanLabel(p.fraction))")
+                                Text(verbatim: "\(SensorPresentation.format(p.celsius, unit: unit)), \(fanLabel(p.fraction))")
                                     .font(.caption2.monospacedDigit())
                                     .padding(.horizontal, 5).padding(.vertical, 2)
                                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))

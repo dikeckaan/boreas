@@ -5,6 +5,7 @@ options:
   deploymentTarget:
     macOS: "15.0"
   createIntermediateGroups: true
+  developmentLanguage: en
 
 # Team ID lives in the gitignored Config/Signing.xcconfig (see Config/Signing.xcconfig.example).
 configFiles:
@@ -14,6 +15,8 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    # Apple Silicon only (see the spec); also keeps universal builds such as -exportLocalizations working.
+    ARCHS: arm64
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: 0.1.0
@@ -49,6 +52,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kaandikec.boreas.helper
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         SKIP_INSTALL: YES
+        # A root daemon with no UI: nothing to translate.
+        LOCALIZATION_EXPORT_SUPPORTED: NO
 
   Boreas:
     type: application
@@ -81,8 +86,12 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         LSUIElement: true
+        CFBundleLocalizations: [en, tr]
         BoreasTeamID: $(DEVELOPMENT_TEAM)
     settings:
       base:
         PRODUCT_NAME: Boreas
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.kaandikec.boreas

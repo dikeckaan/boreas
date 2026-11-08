@@ -10,8 +10,8 @@ struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            // Placeholder glyph until Task 10 adds the template MenuBarIcon asset.
-            Image(systemName: "fan")
+            Image("MenuBarIcon")
+                .accessibilityLabel("Boreas")
             if let text = model.menuBarText {
                 Text(text).monospacedDigit()
             }
@@ -114,8 +114,11 @@ struct MenuBarPanel: View {
                 Button {
                     showMainWindow()
                 } label: {
-                    Label(model.helperStatus == .unavailable ? "Fan control unavailable" : "Set up fan control…",
-                          systemImage: "exclamationmark.circle")
+                    if model.helperStatus == .unavailable {
+                        Label("Fan control unavailable", systemImage: "exclamationmark.circle")
+                    } else {
+                        Label("Set up fan control…", systemImage: "exclamationmark.circle")
+                    }
                 }
                 .buttonStyle(.link)
                 .font(.callout)
@@ -175,12 +178,12 @@ private struct FanRow: View {
 // MARK: - Building blocks
 
 private struct SectionHeader: View {
-    let title: LocalizedStringKey
-    init(_ title: LocalizedStringKey) { self.title = title }
+    let title: LocalizedStringResource
+    init(_ title: LocalizedStringResource) { self.title = title }
 
     var body: some View {
-        Text(title)
-            .textCase(.uppercase)
+        // Upper-cased here, by the app language's rules, rather than with `.textCase`.
+        Text(verbatim: AppLanguage.uppercased(title))
             .font(.caption2.weight(.medium))
             .kerning(0.6)
             .foregroundStyle(.secondary)

@@ -102,12 +102,12 @@ extension SensorGroup {
 }
 
 struct ColumnHeader: View {
-    let title: LocalizedStringKey
-    init(_ title: LocalizedStringKey) { self.title = title }
+    let title: LocalizedStringResource
+    init(_ title: LocalizedStringResource) { self.title = title }
 
     var body: some View {
-        Text(title)
-            .textCase(.uppercase)
+        // Upper-cased here, by the app language's rules, rather than with `.textCase`.
+        Text(verbatim: AppLanguage.uppercased(title))
             .font(.caption2.weight(.medium))
             .kerning(0.6)
             .foregroundStyle(.secondary)

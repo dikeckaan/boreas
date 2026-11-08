@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Boreas app icon, simplified for 16-64 px: no stars, one soft aurora band, a larger fan with
+       bolder, opaque blades, a dark edge and a big hub so the three blades stay distinct. -->
+  <defs>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#040a1c"/><stop offset=".55" stop-color="#0c1938"/><stop offset="1" stop-color="#1b1243"/>
+    </linearGradient>
+    <linearGradient id="aur" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2cffb0" stop-opacity=".15"/><stop offset=".4" stop-color="#2cffb0" stop-opacity=".8"/><stop offset=".75" stop-color="#29c9ff" stop-opacity=".7"/><stop offset="1" stop-color="#a45cff" stop-opacity=".35"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cdeaff"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="48"/></filter>
+    <path id="b" d="M512 512 C 404 448, 366 270, 488 160 C 574 84, 732 128, 732 246 C 732 380, 610 466, 512 512 Z"/>
+    <g id="fan">
+      <use href="#b"/>
+      <use href="#b" transform="rotate(120 512 512)"/>
+      <use href="#b" transform="rotate(240 512 512)"/>
+    </g>
+  </defs>
+  <g clip-path="url(#sq)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <path d="M40 330 C 260 210, 540 400, 1000 230 L 1000 420 C 560 600, 280 400, 40 520 Z" fill="url(#aur)" filter="url(#soft)"/>
+    <use href="#fan" fill="url(#blade)" stroke="#071a40" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
+    <circle cx="512" cy="512" r="92" fill="#0a1634"/>
+    <circle cx="512" cy="512" r="92" fill="none" stroke="#fff" stroke-width="20"/>
+  </g>
+</svg>

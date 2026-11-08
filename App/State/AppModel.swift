@@ -76,7 +76,7 @@ final class AppModel {
         self.store = store
         self.settings = store.load()
         self.catalog = (try? SensorCatalog.bundled()) ?? SensorCatalog(entries: [])
-        self.language = Bundle.main.preferredLocalizations.first ?? "en"
+        self.language = AppLanguage.code
         setUpLoginItemOnFirstLaunch()
     }
 

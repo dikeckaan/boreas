@@ -28,9 +28,10 @@ struct OnboardingView: View {
 
     private var setup: some View {
         VStack(spacing: 16) {
-            Image(systemName: "fan")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.secondary)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 72, height: 72)
+                .accessibilityHidden(true)
             Text("Set Up Fan Control")
                 .font(.title2.weight(.semibold))
             Text("To change fan speeds, Boreas needs a small helper service with administrator rights. It runs only while Boreas is open, gives every fan back to Apple's automatic control when Boreas quits or the Mac sleeps, and accepts commands from Boreas alone. Temperatures can be read without it.")
