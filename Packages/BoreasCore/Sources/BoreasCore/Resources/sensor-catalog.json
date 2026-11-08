@@ -14,7 +14,7 @@
     "nameTR": "CPU kalıp 0",
     "group": "cpu",
     "featured": true,
-    "safety": true,
+    "safety": false,
     "suspect": false
   },
   {
@@ -23,7 +23,7 @@
     "nameTR": "CPU kalıp 18",
     "group": "cpu",
     "featured": true,
-    "safety": true,
+    "safety": false,
     "suspect": false
   },
   {
@@ -32,7 +32,7 @@
     "nameTR": "CPU kalıp {n}",
     "group": "cpu",
     "featured": false,
-    "safety": true,
+    "safety": false,
     "suspect": false
   },
   {

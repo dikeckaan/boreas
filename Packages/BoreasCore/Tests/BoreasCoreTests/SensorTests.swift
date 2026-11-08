@@ -113,3 +113,11 @@ private func tempFake() -> FakeSMCClient {
   #expect(try CLICommand.parse(["sensors"]) == .sensors(raw: false))
   #expect(try CLICommand.parse(["sensors", "--raw"]) == .sensors(raw: true))
 }
+
+@Test func bundledCatalogSafetyAndFeaturedRules() throws {
+  let e = try SensorCatalog.bundled().entries
+  #expect(e.filter { $0.match.hasPrefix("hid:PMU tdie") }.allSatisfy { !$0.safety })
+  #expect(e.contains { $0.safety && $0.group == .cpu })
+  #expect(e.contains { $0.safety && $0.group == .gpu })
+  #expect(e.filter(\.featured).count <= 8)
+}
