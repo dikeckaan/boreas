@@ -23,25 +23,24 @@ public final class SensorReader: @unchecked Sendable {
 
     public func read() -> [SensorReading] {
         var readings: [SensorReading] = []
-        var matched = Set<Int>()  // indices of readings that resolved to a catalog entry
+        var points: [String?] = []
         for source in sources {
             for r in source.read() where Self.isValid(r.celsius) {
                 let m = catalog.match(r.id)
-                let reading = SensorReading(
+                readings.append(SensorReading(
                     id: r.id, rawName: r.rawName,
-                    name: m?.name(language: language) ?? r.rawName,
+                    name: m?.name(language: language, rawName: r.rawName) ?? r.rawName,
                     group: m?.entry.group ?? .other, celsius: r.celsius,
                     featured: m?.entry.featured ?? false, safety: m?.entry.safety ?? false,
-                    suspect: m?.entry.suspect ?? false)
-                if m != nil { matched.insert(readings.count) }
-                readings.append(reading)
+                    suspect: m?.entry.suspect ?? false))
+                points.append(m?.entry.point)
             }
         }
-        // HID wins over SMC when both resolve to the same catalog name (cross-source only).
-        let hidNames = Set(readings.indices.filter { matched.contains($0) && readings[$0].id.rawValue.hasPrefix("hid:") }
-            .map { readings[$0].name })
-        return readings.enumerated().filter { i, r in
-            !(matched.contains(i) && r.id.rawValue.hasPrefix("smc:") && hidNames.contains(r.name))
-        }.map(\.element)
+        // HID wins over other sources when both resolve to the same catalog `point` (cross-source only).
+        let hidPoints = Set(readings.indices.filter { readings[$0].id.rawValue.hasPrefix("hid:") }.compactMap { points[$0] })
+        return readings.indices.filter { i in
+            guard let p = points[i] else { return true }
+            return readings[i].id.rawValue.hasPrefix("hid:") || !hidPoints.contains(p)
+        }.map { readings[$0] }
     }
 }

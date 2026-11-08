@@ -11,12 +11,14 @@ public final class SMCSensorSource: SensorSource, @unchecked Sendable {
     private func sensorKeys() -> [FourCC] {
         lock.withLock {
             if let keys { return keys }
+            // A failed or empty discovery is not cached, so the next read retries it.
+            guard let all = try? smc.allKeys() else { return [] }
             var found: [FourCC] = []
-            for k in (try? smc.allKeys()) ?? [] where k.description.hasPrefix("T") {
+            for k in all where k.description.hasPrefix("T") {
                 guard let v = try? smc.read(k), v.type == "flt " || v.type == "sp78" else { continue }
                 found.append(k)
             }
-            keys = found
+            if !found.isEmpty { keys = found }
             return found
         }
     }

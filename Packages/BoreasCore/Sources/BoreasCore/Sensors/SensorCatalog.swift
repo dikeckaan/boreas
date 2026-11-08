@@ -8,9 +8,13 @@ public struct CatalogEntry: Codable, Sendable {
     public let featured: Bool
     public let safety: Bool
     public let suspect: Bool
+    /// Physical measurement point. A reading from another source sharing it with a HID
+    /// reading is dropped (HID wins).
+    public let point: String?
 
     public init(match: String, nameEN: String, nameTR: String, group: SensorGroup,
-                featured: Bool, safety: Bool, suspect: Bool) {
+                featured: Bool, safety: Bool, suspect: Bool, point: String? = nil) {
+        self.point = point
         self.match = match; self.nameEN = nameEN; self.nameTR = nameTR; self.group = group
         self.featured = featured; self.safety = safety; self.suspect = suspect
     }
@@ -21,10 +25,12 @@ public struct CatalogMatch: Sendable {
     /// Digits captured by `{n}`, if the pattern had one.
     public let number: String?
 
-    public func name(language: String) -> String {
-        let base = language.lowercased().hasPrefix("tr") ? entry.nameTR : entry.nameEN
-        guard let number else { return base }
-        return base.replacingOccurrences(of: "{n}", with: number)
+    /// Wildcard (`*`) entries without `{n}` get the raw name appended so rows stay distinguishable.
+    public func name(language: String, rawName: String) -> String {
+        var base = language.lowercased().hasPrefix("tr") ? entry.nameTR : entry.nameEN
+        if let number { base = base.replacingOccurrences(of: "{n}", with: number) }
+        if entry.match.contains("*") && !entry.match.contains("{n}") { base += " (\(rawName))" }
+        return base
     }
 }
 
@@ -56,7 +62,9 @@ public struct SensorCatalog: @unchecked Sendable {
     }
 
     public func match(_ id: SensorID) -> CatalogMatch? {
-        let s = id.rawValue
+        var s = id.rawValue
+        // HID IDs carry a "#<discriminator>" suffix; catalog patterns match the Product part.
+        if s.hasPrefix("hid:"), let hash = s.lastIndex(of: "#") { s = String(s[..<hash]) }
         let range = NSRange(s.startIndex..., in: s)
         for (entry, re) in zip(entries, compiled) {
             guard let re, let m = re.firstMatch(in: s, options: [], range: range) else { continue }

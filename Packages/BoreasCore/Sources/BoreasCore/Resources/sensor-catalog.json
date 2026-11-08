@@ -68,7 +68,7 @@
     "nameTR": "GPU kümesi",
     "group": "gpu",
     "featured": true,
-    "safety": false,
+    "safety": true,
     "suspect": false
   },
   {
@@ -77,7 +77,7 @@
     "nameTR": "GPU kümesi",
     "group": "gpu",
     "featured": false,
-    "safety": false,
+    "safety": true,
     "suspect": false
   },
   {
@@ -87,7 +87,8 @@
     "group": "storage",
     "featured": true,
     "safety": false,
-    "suspect": false
+    "suspect": false,
+    "point": "ssd-nand"
   },
   {
     "match": "smc:TH0*",
@@ -96,7 +97,8 @@
     "group": "storage",
     "featured": false,
     "safety": false,
-    "suspect": false
+    "suspect": false,
+    "point": "ssd-nand"
   },
   {
     "match": "smc:TW0P",
