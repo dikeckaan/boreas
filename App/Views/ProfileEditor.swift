@@ -30,7 +30,14 @@ struct ProfileEditor: View {
     }
 
     private var isBuiltIn: Bool { draft.builtIn != nil }
-    private var canSave: Bool { isBuiltIn || !draft.name.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// Names of the other profiles, as shown (built-ins by their localized name, too).
+    private var otherNames: [String] {
+        model.settings.profiles.filter { $0.id != draft.id }.flatMap { [$0.name, $0.displayName] }
+    }
+    private var nameTaken: Bool { !isBuiltIn && ProfileNaming.isTaken(draft.name, among: otherNames) }
+    private var canSave: Bool {
+        isBuiltIn || (!draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !nameTaken)
+    }
     private var selectedIndex: Int? { draft.rules.firstIndex { $0.id == selectedRuleID } }
     private var sensors: [SensorReading] { model.snapshot?.sensors ?? [] }
 
@@ -69,6 +76,11 @@ struct ProfileEditor: View {
                     TextField("Name", text: $draft.name)
                         .textFieldStyle(.roundedBorder)
                         .font(.title3)
+                    if nameTaken {
+                        Label("Another profile already has this name.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 ColumnHeader("Rules")
@@ -115,9 +127,14 @@ struct ProfileEditor: View {
                         Text(g.title).tag(SensorSourceRef.group(g))
                     }
                 }
+                let choices = SensorPresentation.sourceChoices(
+                    sensors: sensors, prefs: model.settings.sensorPrefs, current: rule.source)
                 Section("Sensors") {
-                    ForEach(sourceChoices(including: rule.source), id: \.id) { r in
+                    ForEach(choices.sensors, id: \.id) { r in
                         Text(model.settings.sensorPrefs.displayName(r)).tag(SensorSourceRef.sensor(r.id))
+                    }
+                    if let missing = choices.missing {
+                        Text("(missing) \(missing)").tag(rule.source)
                     }
                 }
             }
@@ -139,18 +156,6 @@ struct ProfileEditor: View {
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Color.accentColor : .clear, lineWidth: 1))
         .contentShape(Rectangle())
         .onTapGesture { selectedRuleID = rule.id }
-    }
-
-    /// Usable sensors, plus the rule's current sensor when it is not among them (kept so the
-    /// picker always has a matching tag).
-    private func sourceChoices(including source: SensorSourceRef) -> [SensorReading] {
-        let prefs = model.settings.sensorPrefs
-        var list = sensors.filter { !$0.suspect && !prefs.hidden.contains($0.id) && SensorReader.isValid($0.celsius) }
-        if case .sensor(let id) = source, !list.contains(where: { $0.id == id }),
-           let known = sensors.first(where: { $0.id == id }) {
-            list.append(known)
-        }
-        return list.sorted { ($0.group.rawValue, prefs.displayName($0)) < ($1.group.rawValue, prefs.displayName($1)) }
     }
 
     private func addRule() {
@@ -210,7 +215,7 @@ struct ProfileEditor: View {
                 .keyboardShortcut(.cancelAction)
             Button("Save") {
                 var p = draft
-                p.name = p.name.trimmingCharacters(in: .whitespaces)
+                p.name = p.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 model.saveProfile(p)
                 dismiss()
             }
@@ -220,12 +225,18 @@ struct ProfileEditor: View {
         .padding(12)
     }
 
-    /// Saves a copy of what is on screen as a new user profile and continues editing that copy.
+    /// Opens a copy of what is on screen as a new, unsaved user profile. Nothing is written until Save.
     private func duplicate() {
-        let copy = CurveEditing.duplicate(draft, name: String(localized: "\(draft.displayName) copy"))
-        model.saveProfile(copy)
+        let base = String(localized: "\(draft.displayName) copy")
+        var name = base
+        var n = 2
+        while ProfileNaming.isTaken(name, among: otherNames + [draft.name]) {
+            name = "\(base) \(n)"
+            n += 1
+        }
+        let copy = CurveEditing.duplicate(draft, name: name)
         draft = copy
-        existsInModel = true
+        existsInModel = false
         selectedRuleID = copy.rules.first?.id
     }
 }

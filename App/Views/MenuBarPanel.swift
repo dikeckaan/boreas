@@ -31,7 +31,7 @@ extension AppModel {
     var menuBarText: String? {
         guard let snapshot else { return nil }
         let temperature = settings.menuBarSensor.temperature(in: snapshot.sensors)
-            .map { Format.temperature($0, unit: settings.unit) }
+            .map { SensorPresentation.format($0, unit: settings.unit, compact: true) }
         let rpm = snapshot.fans.map(\.actual).filter(\.isFinite).max().map(Format.rpm)
         let parts: [String?]
         switch settings.menuBarDisplay {
@@ -83,7 +83,7 @@ struct MenuBarPanel: View {
                 PanelRow {
                     Text(model.settings.sensorPrefs.displayName(r)).lineLimit(1)
                     Spacer()
-                    Text(Format.temperature(r.celsius, unit: model.settings.unit)).monospacedDigit()
+                    Text(SensorPresentation.format(r.celsius, unit: model.settings.unit, compact: true)).monospacedDigit()
                 }
             }
 
@@ -91,6 +91,7 @@ struct MenuBarPanel: View {
             VStack(alignment: .leading, spacing: 2) {
                 PanelButton("Open Window…") { showMainWindow() }
                     .foregroundStyle(Color.accentColor)
+                PanelButton("Settings…") { showSettings() }
                 PanelButton("Quit Boreas") { NSApp.terminate(nil) }
             }
             .padding(.vertical, 4)
@@ -127,6 +128,12 @@ struct MenuBarPanel: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 6)
+    }
+
+    private func showSettings() {
+        openWindow(id: "settings")
+        NSApp.activate()
+        dismiss()
     }
 
     private func showMainWindow() {
@@ -300,14 +307,9 @@ extension Profile {
     }
 }
 
-/// Interim formatting for the menu bar; Task 8 adds `SensorPresentation` for the main window.
+/// Number formatting shared by the menu bar and the main window. Temperatures go through
+/// `SensorPresentation.format`.
 enum Format {
-    static func temperature(_ celsius: Double, unit: TemperatureUnit) -> String {
-        let value = unit == .fahrenheit ? celsius * 9 / 5 + 32 : celsius
-        guard value.isFinite else { return "–" }
-        return "\(Int(value.rounded()))°"
-    }
-
     static func rpm(_ value: Double) -> String {
         guard value.isFinite else { return "–" }
         return Int(value.rounded()).formatted()

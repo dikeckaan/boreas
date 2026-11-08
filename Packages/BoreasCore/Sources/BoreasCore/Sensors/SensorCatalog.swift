@@ -108,6 +108,19 @@ public struct SensorCatalog: @unchecked Sendable {
         return nil
     }
 
+    /// The reading's name in `language`, resolved from this catalog by id and `rawName`. The name the
+    /// reading arrived with is ignored (the helper always sends English); no match gives `rawName`.
+    public func localizedName(for r: SensorReading, language: String) -> String {
+        match(r.id)?.name(language: language, rawName: r.rawName) ?? r.rawName
+    }
+
+    /// `r` with its name re-resolved by `localizedName(for:language:)`.
+    public func localized(_ r: SensorReading, language: String) -> SensorReading {
+        SensorReading(id: r.id, rawName: r.rawName, name: localizedName(for: r, language: language),
+                      group: r.group, celsius: r.celsius, featured: r.featured, safety: r.safety,
+                      suspect: r.suspect, hotspot: r.hotspot)
+    }
+
     /// Directories that may hold `BoreasCore_BoreasCore.bundle`:
     /// - an app's Resources (also BoreasHelper, whose `Bundle.main` is the enclosing Boreas.app);
     /// - next to a command-line tool;

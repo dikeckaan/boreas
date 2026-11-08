@@ -58,6 +58,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Seconds between samples.
     public var sampleInterval: Double = 1
     public var historyCollapsed = false
+    /// True once the first-launch login item registration has been attempted. It is never done
+    /// again, so a user who turned launch at login off keeps it off.
+    public var didInitialLoginItemSetup = false
 
     public init(profiles: [Profile] = BuiltInProfiles.all(),
                 activeProfileID: UUID = BuiltInProfiles.automaticID,
@@ -67,7 +70,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
                 menuBarSensor: SensorSourceRef = .group(.cpu),
                 unit: TemperatureUnit = .celsius,
                 sampleInterval: Double = 1,
-                historyCollapsed: Bool = false) {
+                historyCollapsed: Bool = false,
+                didInitialLoginItemSetup: Bool = false) {
         self.profiles = profiles
         self.activeProfileID = activeProfileID
         self.fanModes = fanModes
@@ -77,13 +81,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.unit = unit
         self.sampleInterval = sampleInterval
         self.historyCollapsed = historyCollapsed
+        self.didInitialLoginItemSetup = didInitialLoginItemSetup
     }
+
+    /// Seconds. `normalize()` clamps to this.
+    public static let sampleIntervalRange: ClosedRange<Double> = 0.5...10
 
     public static var defaults: AppSettings { AppSettings() }
 
     private enum CodingKeys: String, CodingKey {
         case profiles, activeProfileID, fanModes, sensorPrefs, menuBarDisplay, menuBarSensor, unit,
-             sampleInterval, historyCollapsed
+             sampleInterval, historyCollapsed, didInitialLoginItemSetup
     }
 
     public init(from decoder: Decoder) throws {
@@ -98,6 +106,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         unit = try c.decodeIfPresent(TemperatureUnit.self, forKey: .unit) ?? d.unit
         sampleInterval = try c.decodeIfPresent(Double.self, forKey: .sampleInterval) ?? d.sampleInterval
         historyCollapsed = try c.decodeIfPresent(Bool.self, forKey: .historyCollapsed) ?? d.historyCollapsed
+        didInitialLoginItemSetup = try c.decodeIfPresent(Bool.self, forKey: .didInitialLoginItemSetup)
+            ?? d.didInitialLoginItemSetup
     }
 
     // MARK: - Profiles
@@ -155,8 +165,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     /// Puts back missing built-in profiles (in their usual order, ahead of user profiles) and
-    /// falls back to Automatic if the active profile no longer exists.
+    /// falls back to Automatic if the active profile no longer exists. Also clamps `sampleInterval`.
     public mutating func normalize() {
+        sampleInterval = sampleInterval.isFinite ? Swift.min(Swift.max(sampleInterval, Self.sampleIntervalRange.lowerBound),
+                                                            Self.sampleIntervalRange.upperBound) : 1
         for (i, builtIn) in BuiltInProfiles.all().enumerated() where !profiles.contains(where: { $0.id == builtIn.id }) {
             profiles.insert(builtIn, at: Swift.min(i, profiles.count))
         }

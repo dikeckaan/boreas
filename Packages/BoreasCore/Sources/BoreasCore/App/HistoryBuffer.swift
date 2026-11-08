@@ -23,30 +23,30 @@ public struct HistorySample: Sendable, Equatable {
     }
 }
 
-/// Fixed-capacity ring buffer, oldest sample dropped first. 3600 samples is one hour at 1 Hz.
+/// Keeps the last `window` seconds (one hour) of samples, whatever the sampling interval.
+/// `capacity` is only a safety cap (7200 = one hour at the fastest interval, 0.5 s); when it is
+/// hit the oldest sample goes first.
 public struct HistoryBuffer: Sendable {
     public let capacity: Int
+    public let window: TimeInterval
     private var storage: [HistorySample] = []
-    /// Index of the oldest sample once the buffer is full.
-    private var head = 0
 
-    public init(capacity: Int = 3600) {
+    public init(capacity: Int = 7200, window: TimeInterval = 3600) {
         self.capacity = Swift.max(1, capacity)
-        storage.reserveCapacity(Swift.min(self.capacity, 4096))
+        self.window = window
     }
 
     public mutating func append(_ s: HistorySample) {
-        if storage.count < capacity {
-            storage.append(s)
-        } else {
-            storage[head] = s
-            head = (head + 1) % capacity
-        }
+        storage.append(s)
+        let cutoff = s.date.addingTimeInterval(-window)
+        let stale = storage.prefix { $0.date <= cutoff }.count
+        let over = Swift.max(0, storage.count - capacity)
+        let drop = Swift.max(stale, over)
+        if drop > 0 { storage.removeFirst(drop) }
     }
 
     /// Samples with `date >= since`, oldest first.
     public func samples(since: Date) -> [HistorySample] {
-        let ordered = storage[head...] + storage[..<head]
-        return ordered.filter { $0.date >= since }
+        storage.filter { $0.date >= since }
     }
 }

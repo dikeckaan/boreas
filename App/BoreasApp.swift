@@ -18,6 +18,12 @@ struct BoreasApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(.suppressed)
+
+        Window("Settings", id: "settings") {
+            SettingsView(model: appDelegate.model)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 

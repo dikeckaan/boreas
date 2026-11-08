@@ -428,7 +428,7 @@ private func running() -> Rig {
 }
 
 @Test func snapshotCarriesXPCFormatVersion() {
-    #expect(boreasXPCFormatVersion == 1)
+    #expect(boreasXPCFormatVersion == 2)
     #expect(running().rt.snapshot().formatVersion == boreasXPCFormatVersion)
 }
 

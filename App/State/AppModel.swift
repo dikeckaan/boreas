@@ -53,6 +53,9 @@ final class AppModel {
     /// The first-launch welcome window opens once per run (MenuBarLabel).
     @ObservationIgnored var welcomeShown = false
     @ObservationIgnored private let approvalGuide = ApprovalGuidePanel()
+    /// Sensor names are always resolved here, in the user's language, never taken from the helper.
+    @ObservationIgnored private let catalog: SensorCatalog
+    @ObservationIgnored private let language: String
 
     static let statusCheckInterval: Duration = .seconds(3)
 
@@ -67,6 +70,17 @@ final class AppModel {
     init(store: SettingsStore = AppModel.defaultStore()) {
         self.store = store
         self.settings = store.load()
+        self.catalog = (try? SensorCatalog.bundled()) ?? SensorCatalog(entries: [])
+        self.language = Bundle.main.preferredLocalizations.first ?? "en"
+        setUpLoginItemOnFirstLaunch()
+    }
+
+    /// Launch at login is on by default, set up once. After that the user's choice (System Settings
+    /// or the Settings window) is left alone. Debug local-only runs never touch it.
+    private func setUpLoginItemOnFirstLaunch() {
+        guard !Self.localOnly, !settings.didInitialLoginItemSetup else { return }
+        LoginItem.performInitialSetup()
+        settings.didInitialLoginItemSetup = true
     }
 
     static func defaultStore() -> SettingsStore {
@@ -121,6 +135,41 @@ final class AppModel {
         await refreshStatus()
         // Registration that only awaits approval is not an error for the user.
         if helperStatus == .requiresApproval || helperStatus == .enabled { installError = nil }
+    }
+
+    /// Fans back to Apple first, then the helper is unregistered. If the reset fails the helper
+    /// stays registered and the error is shown.
+    func removeHelper() async {
+        guard !Self.localOnly else { return }
+        installError = nil
+        if helperStatus == .enabled {
+            do {
+                try await client.resetAllToAuto()
+            } catch {
+                log.error("resetAllToAuto before removal failed: \(String(describing: error), privacy: .public)")
+                installError = error.localizedDescription
+                return
+            }
+        }
+        client.invalidate()
+        sentGeneration = nil
+        if helperStatus != .notRegistered {
+            do {
+                try await installer.unregister()
+                registrationMissing = false
+            } catch {
+                log.error("unregister failed: \(String(describing: error), privacy: .public)")
+                installError = error.localizedDescription
+            }
+        }
+        await refreshStatus()
+    }
+
+    /// Remove, then install again.
+    func reinstallHelper() async {
+        await removeHelper()
+        guard installError == nil else { return }
+        await installHelper()
     }
 
     /// Opens Login Items and floats a small guide next to it until the helper is enabled.
@@ -204,7 +253,9 @@ final class AppModel {
         await readLocally()
     }
 
-    private func record(_ s: HelperSnapshot) {
+    private func record(_ received: HelperSnapshot) {
+        var s = received
+        s.sensors = received.sensors.map { catalog.localized($0, language: language) }
         snapshot = s
         isLocal = false
         fanCount = s.fans.count
@@ -217,13 +268,14 @@ final class AppModel {
         if let localReader {
             reader = localReader
         } else {
-            let language = Bundle.main.preferredLocalizations.first ?? "en"
+            let language = self.language
             reader = await Task.detached(priority: .utility) { LocalReader(language: language) }.value
             localReader = reader
         }
         let reading = await Task.detached(priority: .utility) { reader.read() }.value
         if quitting { return }
-        snapshot = HelperSnapshot(fans: reading.fans, sensors: reading.sensors, commands: [:],
+        snapshot = HelperSnapshot(fans: reading.fans,
+                                  sensors: reading.sensors.map { catalog.localized($0, language: language) }, commands: [:],
                                   ceilingTripped: false, helperVersion: "")
         isLocal = true
         if let count = reading.fanCount { fanCount = count }

@@ -51,10 +51,23 @@ public enum SensorPresentation {
         unit == .fahrenheit ? c * 9 / 5 + 32 : c
     }
 
-    /// Whole degrees with the unit letter: `62°C`, `212°F`.
-    public static func format(_ c: Double, unit: TemperatureUnit) -> String {
+    /// Whole degrees with the unit letter: `62°C`, `212°F`. `compact` drops the letter (menu bar,
+    /// panel rows): `62°`.
+    public static func format(_ c: Double, unit: TemperatureUnit, compact: Bool = false) -> String {
         guard c.isFinite else { return "–" }
-        return "\(Int(value(c, unit: unit).rounded()))°\(unit == .fahrenheit ? "F" : "C")"
+        let degrees = Int(value(c, unit: unit).rounded())
+        return compact ? "\(degrees)°" : "\(degrees)°\(unit == .fahrenheit ? "F" : "C")"
+    }
+
+    /// Sensors the rule picker offers (usable ones, as given), and `missing`: the name to tag the
+    /// rule's current sensor with when it is not among them (its `rawName` if still reported,
+    /// else its id), so the picker always has a matching selection.
+    public static func sourceChoices(sensors: [SensorReading], prefs: SensorPrefs,
+                                     current: SensorSourceRef) -> (sensors: [SensorReading], missing: String?) {
+        let list = sensors.filter { !$0.suspect && !prefs.hidden.contains($0.id) && SensorReader.isValid($0.celsius) }
+            .sorted { ($0.group.rawValue, prefs.displayName($0)) < ($1.group.rawValue, prefs.displayName($1)) }
+        guard case .sensor(let id) = current, !list.contains(where: { $0.id == id }) else { return (list, nil) }
+        return (list, sensors.first { $0.id == id }?.rawName ?? id.rawValue)
     }
 
     /// At most `maxCount` evenly spaced elements, first and last kept (for drawing long histories).

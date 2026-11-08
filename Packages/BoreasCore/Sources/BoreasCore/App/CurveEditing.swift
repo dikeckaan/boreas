@@ -17,8 +17,16 @@ public enum CurveEditing {
         var lo = minCelsius, hi = maxCelsius
         if index > 0 { lo = Swift.max(lo, pts[index - 1].celsius + minGap) }
         if index < pts.count - 1 { hi = Swift.min(hi, pts[index + 1].celsius - minGap) }
-        let t = p.celsius.isNaN ? pts[index].celsius : p.celsius
+        var t = p.celsius.isNaN ? pts[index].celsius : p.celsius
         let f = p.fraction.isNaN ? pts[index].fraction : p.fraction
+        if hi < lo {
+            // Neighbours closer than 2×minGap: no room for the gap on both sides, so sit midway
+            // between them (the range ends stand in for a missing neighbour). Order stays strict.
+            let below = index > 0 ? pts[index - 1].celsius : minCelsius
+            let above = index < pts.count - 1 ? pts[index + 1].celsius : maxCelsius
+            t = (below + above) / 2
+            lo = t; hi = t
+        }
         pts[index] = CurvePoint(celsius: Swift.min(Swift.max(t, lo), Swift.max(lo, hi)),
                                 fraction: Swift.min(Swift.max(f, 0), 1))
         return Curve(points: pts)
@@ -49,5 +57,19 @@ public enum CurveEditing {
         Profile(name: name, builtIn: nil,
                 rules: p.rules.map { Rule(source: $0.source, curve: $0.curve) },
                 behavior: p.behavior)
+    }
+}
+
+public enum ProfileNaming {
+    /// Whether `name` (trimmed, case-insensitive) equals one of `names`. A blank name is never
+    /// "taken": the editor rejects those separately.
+    public static func isTaken(_ name: String, among names: [String]) -> Bool {
+        let key = fold(name)
+        guard !key.isEmpty else { return false }
+        return names.contains { fold($0) == key }
+    }
+
+    private static func fold(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
