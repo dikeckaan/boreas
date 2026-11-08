@@ -18,7 +18,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 
 - ☐ Rule 2: put the Mac to sleep with a profile active → fans are on Automatic while asleep; after wake the profile is re-applied (app connected).
 - ☐ Rule 2: wake the Mac with the app quit → fans stay on Automatic.
-- ☐ Rule 3: `sudo launchctl kill TERM system/com.kaandikec.boreas.helper` while a profile drives the fan → fan returns to Automatic.
+- ✅ 2026-11-08 Rule 3: `sudo launchctl kill TERM system/com.kaandikec.boreas.helper` while Boreas drives the fan → fan returns to Automatic. (Result: fixed 4900 rpm → `otomatik` at t+1 s; because the app was still open it relaunched the helper and re-applied the setting at t+2 s.)
 - ☐ Rule 3: Remove the helper from Settings while a profile is active → fan returns to Automatic before the helper is unregistered.
 - ☐ Rule 4: quit Boreas, edit `~/Library/Application Support/Boreas/settings.json` so the only rule of a custom profile reads `"source":{"kind":"sensor","value":"smc:ZZZZ"}` (a sensor this Mac does not have), relaunch, make that profile active with the fan on Profile → within 2 s the fan is on Automatic (`boreasctl fans` agrees) and the editor shows the rule's source as "(missing) smc:ZZZZ".
 - ☐ Rule 5: with the fan on a low fixed speed under heavy CPU+GPU load, the safety-sensor average passes 100 °C → fan goes to max, and returns to the profile once the average is below 90 °C.

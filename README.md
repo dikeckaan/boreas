@@ -29,7 +29,7 @@ Boreas never leaves a fan stuck in manual mode. These rules cannot be switched o
 
 1. If the app quits, crashes or is killed, the helper puts all fans back on Automatic within a few seconds. *Verified on hardware: `kill -9` → Automatic in 3–4 s, Quit → Automatic in 1 s.*
 2. Before sleep the fans go to Automatic; after wake the active profile is re-applied if the app is running. *Unit-tested; sleep/wake not yet verified on hardware.*
-3. When the helper itself stops (SIGTERM, removal, update), fans go to Automatic. *Unit-tested; SIGTERM not yet verified on hardware.*
+3. When the helper itself stops (SIGTERM, removal, update), fans go to Automatic. *Verified on hardware: SIGTERM → Automatic within 1 s.*
 4. If a sensor cannot be read or reports a nonsense value (NaN, 0, above 150 °C), rules that depend on it are ignored; with no valid rule left, the fan returns to Automatic. *Unit-tested.*
 5. A critical-temperature ceiling watches a fixed set of CPU and GPU safety sensors. If their 5-second average passes 100 °C, the fan goes to maximum whatever the profile says, until the average drops below 90 °C. You cannot hide these sensors from it. If neither these sensors nor a CPU/GPU fallback give a valid reading for more than 5 seconds, every fan under Boreas's control goes back to Automatic until they do; a helper that cannot load its sensor catalog refuses manual control altogether. *Unit-tested; not yet verified under real load.*
 6. Fixed speeds are clamped to the fan's real minimum and maximum. *Unit-tested.*

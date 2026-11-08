@@ -29,7 +29,7 @@ Boreas bir fanı asla elle modda takılı bırakmaz. Şu kurallar kapatılamaz. 
 
 1. Uygulama kapanır, çöker ya da öldürülürse yardımcı servis birkaç saniye içinde tüm fanları Otomatik'e alır. *Donanımda doğrulandı: `kill -9` → 3–4 sn'de Otomatik, Çık → 1 sn'de Otomatik.*
 2. Uykudan önce fanlar Otomatik'e alınır; uyanınca uygulama çalışıyorsa etkin profil yeniden uygulanır. *Birim testli; uyku/uyanma donanımda henüz doğrulanmadı.*
-3. Yardımcı servis sonlanırken (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır. *Birim testli; SIGTERM donanımda henüz doğrulanmadı.*
+3. Yardımcı servis sonlanırken (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır. *Donanımda doğrulandı: SIGTERM → 1 sn içinde Otomatik.*
 4. Bir sensör okunamazsa ya da değer saçmaysa (NaN, 0, 150 °C üstü), ona bağlı kurallar devre dışı kalır; geçerli kural kalmazsa fan Otomatik'e döner. *Birim testli.*
 5. Kritik sıcaklık tavanı, sabit bir CPU ve GPU güvenlik sensörü kümesini izler. Bunların 5 saniyelik ortalaması 100 °C'yi aşarsa, profil ne derse desin fan maksimuma alınır; ortalama 90 °C'nin altına inince profile dönülür. Bu sensörleri tavandan gizleyemezsiniz. Ne bu sensörlerden ne de yedek CPU/GPU sensörlerinden 5 saniyeden uzun süre geçerli değer gelmezse, Boreas'ın kontrolündeki tüm fanlar değer yeniden gelene kadar Otomatik'e döner; sensör kataloğunu yükleyemeyen yardımcı servis elle kontrolü tümüyle reddeder. *Birim testli; gerçek yük altında henüz doğrulanmadı.*
 6. Sabit devir, fanın gerçek en düşük ve en yüksek değerine sıkıştırılır. *Birim testli.*
