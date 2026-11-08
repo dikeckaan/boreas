@@ -1,6 +1,6 @@
 # Boreas: Tasarım Dokümanı
 
-Tarih: 2026-11-08 · Durum: onay bekliyor
+Tarih: 2026-11-08 · Durum: kullanıcı onayı bekliyor
 
 Boreas, Apple Silicon Mac'ler için tamamen ücretsiz ve açık kaynak bir fan kontrol ve sıcaklık izleme uygulamasıdır. Macs Fan Control'ün yaptığı işi yapar; ücretli sürümde kilitli olan özel fan profilleri burada herkese açıktır.
 
@@ -30,7 +30,7 @@ Hedef, kullanıcının kendi tarifiyle "basit görünen ama dolu dolu" bir uygul
 
 ## 4. Kesinlikle olmaması gerekenler
 
-- **Mac'i aşırı ısınmaya bırakmak.** Boreas hiçbir koşulda fanı, Apple'ın kendi kontrolünün bırakacağından daha tehlikeli bir durumda bırakmamalı (bkz. §7).
+- **Mac'i aşırı ısınmaya bırakmak.** Profillerin fanı Apple'ın kendi kontrolünden daha yavaş çevirmesine izin verilir; bunu kullanıcı açıkça onayladı. Örneğin Sessiz profil orta sıcaklıklarda Apple'dan daha sessiz kalabilir. Mac'i koruyan, çipin kendi ısı koruması ile Boreas'ın güvenlik kurallarıdır (bkz. §7). Bu kurallar hiçbir profil ya da ayar tarafından kapatılamaz.
 - **Uygulama kapandıktan, çöktükten ya da Mac uykuya geçtikten sonra fanı elle modda bırakmak.**
 - Ücretli, kilitli ya da "Pro" bir özellik. Hesap, telemetri ya da reklam. Uygulama ağa hiç çıkmaz.
 - Macs Fan Control'ün kodunu, görsellerini, adını ya da metinlerini kopyalamak. Boreas kendi adı, logosu ve tasarımıyla bağımsız bir uygulamadır; SMC erişimi kamuya açık bilgiye dayanır.
@@ -73,7 +73,7 @@ Onaylanan taslaklar: `docs/design/mockup-main-window-and-menubar.html` ve `docs/
 - Davranış seçenekleri:
   - **Yumuşak geçiş:** Hedef devir ani sıçramaz, saniyede belirli bir oranla değişir.
   - **Geç tepki (histerezis):** Sıcaklık düşerken eğri X°C (varsayılan 3°C) geriden takip eder, eşik sınırında fan sürekli hızlanıp yavaşlamaz.
-  - **"Eğrinin altında Apple'a bırak":** Hesaplanan devir fanın minimumuna eşit ya da altındaysa fan Otomatik moda geri verilir. *(Benim kararım: Konuşmada "Apple'ın otomatik devrinin altına inme" olarak geçti. Fan elle moddayken Apple'ın o anki hedef devri okunamıyor, bu yüzden aynı amaca bu yolla ulaşılıyor: düşük sıcaklıkta karar Apple'da, yüksek sıcaklıkta Boreas'ta.)*
+  - **"Eğrinin altında Apple'a bırak" (isteğe bağlı, varsayılan kapalı):** Hesaplanan devir fanın minimumuna eşit ya da altındaysa fan Otomatik moda geri verilir. Böylece serin dönemde kararı Apple verir. Profillerin Apple'dan yavaş dönmesi serbest olduğu için bu bir güvenlik önlemi değil, bir tercihtir.
 - **Yerleşik profiller:**
   - **Otomatik:** Tüm fanlar Apple'da. Silinemez.
   - **Sessiz:** CPU'ya bakar, 55°C'ye kadar min devir, 95°C'de max devir.
