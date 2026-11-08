@@ -125,3 +125,16 @@ private func tempFake() -> FakeSMCClient {
   #expect(e.contains { $0.safety && $0.group == .gpu })
   #expect(e.filter(\.featured).count <= 8)
 }
+
+@Test func bundledCatalogMarksTdieAsHotspot() throws {
+    let entries = try SensorCatalog.bundled().entries
+    let tdie = entries.filter { $0.match.hasPrefix("hid:PMU tdie") }
+    #expect(tdie.count == 3)
+    #expect(tdie.allSatisfy { $0.hotspot })
+    #expect(entries.filter { !$0.match.hasPrefix("hid:PMU tdie") }.allSatisfy { !$0.hotspot })
+}
+@Test func readingDecodesWithoutHotspotKey() throws {
+    let json = #"{"id":"smc:TCMb","rawName":"TCMb","name":"x","group":"cpu","celsius":50,"featured":false,"safety":false,"suspect":false}"#
+    let r = try JSONDecoder().decode(SensorReading.self, from: Data(json.utf8))
+    #expect(r.hotspot == false)
+}

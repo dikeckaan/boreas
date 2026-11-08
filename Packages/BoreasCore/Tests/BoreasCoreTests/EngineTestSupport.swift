@@ -4,9 +4,9 @@ import Foundation
 let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 let testFan = FanInfo(index: 0, actual: 1000, min: 1000, max: 4900, target: 1000, isManual: false)
 
-func reading(_ id: String, _ group: SensorGroup, _ c: Double, safety: Bool = false, suspect: Bool = false) -> SensorReading {
+func reading(_ id: String, _ group: SensorGroup, _ c: Double, safety: Bool = false, suspect: Bool = false, hotspot: Bool = false) -> SensorReading {
     SensorReading(id: SensorID(id), rawName: id, name: id, group: group, celsius: c,
-                  featured: false, safety: safety, suspect: suspect)
+                  featured: false, safety: safety, suspect: suspect, hotspot: hotspot)
 }
 
 func cpuGpu(cpu: Double?, gpu: Double? = nil) -> [SensorReading] {

@@ -71,7 +71,7 @@ private func lastTarget(_ smc: FakeSMCClient, fan: Int = 0) -> Double? {
 }
 private func writeCount(_ smc: FakeSMCClient, _ key: FourCC) -> Int { smc.writes.filter { $0.0 == key }.count }
 
-/// Connected client with the silent profile running at 75 °C (fan 0 manual at 2950).
+/// Connected client with the silent profile running at 75 °C (fan 0 manual at 1390).
 private func running() -> Rig {
     let r = make()
     r.rt.clientConnected()
@@ -90,7 +90,7 @@ private func running() -> Rig {
 
 @Test func appliesProfileOnTick() {
     let r = running()
-    #expect(lastTarget(r.smc) == 2950)
+    #expect(lastTarget(r.smc) == 1390)
     #expect(mode(r.smc) == 1)
 }
 
@@ -379,7 +379,7 @@ private func running() -> Rig {
     let r = running()
     let s = r.rt.snapshot()
     #expect(s.helperVersion == "9.9.9")
-    #expect(s.commands == [0: "manual:2950"])
+    #expect(s.commands == [0: "manual:1390"])
     #expect(s.fans.count == 1 && s.fans[0].isManual)
     #expect(s.sensors.map(\.celsius) == [75])
     #expect(!s.ceilingTripped)

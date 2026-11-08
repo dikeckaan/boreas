@@ -38,7 +38,8 @@ public final class SensorReader: @unchecked Sendable {
                     name: m?.name(language: language, rawName: r.rawName) ?? r.rawName,
                     group: m?.entry.group ?? .other, celsius: r.celsius,
                     featured: m?.entry.featured ?? false, safety: m?.entry.safety ?? false,
-                    suspect: m?.entry.suspect ?? false))
+                    suspect: m?.entry.suspect ?? false,
+                    hotspot: m?.entry.hotspot ?? false))
                 points.append(m?.entry.point)
             }
         }

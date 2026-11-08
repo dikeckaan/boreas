@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rule input: one sensor, or a group (the highest non-`suspect` member).
+/// Rule input: one sensor, or a group (the highest non-`suspect`, non-`hotspot` member).
 ///
 /// Persisted (and sent to the helper) as `{"kind":"sensor"|"group","value":"<sensor id or group>"}`.
 public enum SensorSourceRef: Codable, Hashable, Sendable {
@@ -38,15 +38,16 @@ public enum SensorSourceRef: Codable, Hashable, Sendable {
         }
     }
 
-    /// The source's temperature: the sensor's value, or the highest valid non-`suspect` group
-    /// member. nil when nothing valid matches.
+    /// The source's temperature: the sensor's value, or the highest valid non-`suspect`, non-`hotspot` group
+    /// member (hotspots only when the group has nothing else). nil when nothing valid matches.
     public func temperature(in readings: [SensorReading]) -> Double? {
         switch self {
         case .sensor(let id):
             return readings.first { $0.id == id && SensorReader.isValid($0.celsius) }?.celsius
         case .group(let g):
-            return readings.filter { $0.group == g && !$0.suspect && SensorReader.isValid($0.celsius) }
-                .map(\.celsius).max()
+            let members = readings.filter { $0.group == g && !$0.suspect && SensorReader.isValid($0.celsius) }
+            // Per-core hotspots only count when nothing else in the group is readable.
+            return members.filter { !$0.hotspot }.map(\.celsius).max() ?? members.map(\.celsius).max()
         }
     }
 }
@@ -110,10 +111,11 @@ public enum BuiltInProfiles {
     public static let performanceID = UUID(uuidString: "B07EA500-0000-4000-8000-000000000003")!
 
     public static func all() -> [Profile] {
-        let silentCurve = Curve(points: [.init(celsius: 55, fraction: 0), .init(celsius: 95, fraction: 1)])
-        let perfCurve = Curve(points: [.init(celsius: 40, fraction: 0.15),
-                                       .init(celsius: 60, fraction: 0.5),
-                                       .init(celsius: 80, fraction: 1.0)])
+        let silentCurve = Curve(points: [.init(celsius: 65, fraction: 0), .init(celsius: 90, fraction: 0.25),
+                                         .init(celsius: 100, fraction: 1.0)])
+        let perfCurve = Curve(points: [.init(celsius: 50, fraction: 0.2),
+                                       .init(celsius: 70, fraction: 0.6),
+                                       .init(celsius: 85, fraction: 1.0)])
         return [
             Profile(id: automaticID, name: "Automatic", builtIn: .automatic),
             Profile(id: silentID, name: "Silent", builtIn: .silent, rules: [

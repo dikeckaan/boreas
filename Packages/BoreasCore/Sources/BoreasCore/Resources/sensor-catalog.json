@@ -15,7 +15,8 @@
     "group": "cpu",
     "featured": true,
     "safety": false,
-    "suspect": false
+    "suspect": false,
+    "hotspot": true
   },
   {
     "match": "hid:PMU tdie18",
@@ -24,7 +25,8 @@
     "group": "cpu",
     "featured": true,
     "safety": false,
-    "suspect": false
+    "suspect": false,
+    "hotspot": true
   },
   {
     "match": "hid:PMU tdie{n}",
@@ -33,7 +35,8 @@
     "group": "cpu",
     "featured": false,
     "safety": false,
-    "suspect": false
+    "suspect": false,
+    "hotspot": true
   },
   {
     "match": "smc:Tp0g",

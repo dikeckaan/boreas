@@ -11,12 +11,45 @@ public struct CatalogEntry: Codable, Sendable {
     /// Physical measurement point. A reading from another source sharing it with a HID
     /// reading is dropped (HID wins).
     public let point: String?
+    /// Per-core die hotspot; skipped by group aggregation while other members exist.
+    public let hotspot: Bool
 
     public init(match: String, nameEN: String, nameTR: String, group: SensorGroup,
-                featured: Bool, safety: Bool, suspect: Bool, point: String? = nil) {
+                featured: Bool, safety: Bool, suspect: Bool, point: String? = nil, hotspot: Bool = false) {
         self.point = point
+        self.hotspot = hotspot
         self.match = match; self.nameEN = nameEN; self.nameTR = nameTR; self.group = group
         self.featured = featured; self.safety = safety; self.suspect = suspect
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case match, nameEN, nameTR, group, featured, safety, suspect, point, hotspot
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        match = try c.decode(String.self, forKey: .match)
+        nameEN = try c.decode(String.self, forKey: .nameEN)
+        nameTR = try c.decode(String.self, forKey: .nameTR)
+        group = try c.decode(SensorGroup.self, forKey: .group)
+        featured = try c.decode(Bool.self, forKey: .featured)
+        safety = try c.decode(Bool.self, forKey: .safety)
+        suspect = try c.decode(Bool.self, forKey: .suspect)
+        point = try c.decodeIfPresent(String.self, forKey: .point)
+        hotspot = try c.decodeIfPresent(Bool.self, forKey: .hotspot) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(match, forKey: .match)
+        try c.encode(nameEN, forKey: .nameEN)
+        try c.encode(nameTR, forKey: .nameTR)
+        try c.encode(group, forKey: .group)
+        try c.encode(featured, forKey: .featured)
+        try c.encode(safety, forKey: .safety)
+        try c.encode(suspect, forKey: .suspect)
+        try c.encodeIfPresent(point, forKey: .point)
+        if hotspot { try c.encode(true, forKey: .hotspot) }
     }
 }
 

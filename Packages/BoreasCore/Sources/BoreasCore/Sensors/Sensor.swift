@@ -30,11 +30,33 @@ public struct SensorReading: Codable, Sendable, Equatable {
     public let featured: Bool
     public let safety: Bool
     public let suspect: Bool
+    /// Per-core die hotspot: a real temperature that stays visible, but group aggregation skips it
+    /// while other members of the group exist.
+    public let hotspot: Bool
 
     public init(id: SensorID, rawName: String, name: String, group: SensorGroup, celsius: Double,
-                featured: Bool, safety: Bool, suspect: Bool) {
+                featured: Bool, safety: Bool, suspect: Bool, hotspot: Bool = false) {
+        self.hotspot = hotspot
         self.id = id; self.rawName = rawName; self.name = name; self.group = group
         self.celsius = celsius; self.featured = featured; self.safety = safety; self.suspect = suspect
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, rawName, name, group, celsius, featured, safety, suspect, hotspot
+    }
+
+    /// `hotspot` may be absent (snapshots from an older helper).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(SensorID.self, forKey: .id)
+        rawName = try c.decode(String.self, forKey: .rawName)
+        name = try c.decode(String.self, forKey: .name)
+        group = try c.decode(SensorGroup.self, forKey: .group)
+        celsius = try c.decode(Double.self, forKey: .celsius)
+        featured = try c.decode(Bool.self, forKey: .featured)
+        safety = try c.decode(Bool.self, forKey: .safety)
+        suspect = try c.decode(Bool.self, forKey: .suspect)
+        hotspot = try c.decodeIfPresent(Bool.self, forKey: .hotspot) ?? false
     }
 }
 

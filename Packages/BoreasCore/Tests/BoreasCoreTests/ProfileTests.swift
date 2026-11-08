@@ -16,9 +16,10 @@ let silent = Curve(points: [.init(celsius: 55, fraction: 0), .init(celsius: 95, 
     #expect(p.map(\.builtIn) == [.automatic, .silent, .performance])
     #expect(p[0].rules.isEmpty)
     #expect(p[1].rules.map(\.source) == [.group(.cpu)])
-    #expect(p[1].rules[0].curve == silent)
+    #expect(p[1].rules[0].curve.points.map(\.celsius) == [65, 90, 100])
+    #expect(p[1].rules[0].curve.points.map(\.fraction) == [0.0, 0.25, 1.0])
     #expect(Set(p[2].rules.map(\.source)) == [.group(.cpu), .group(.gpu)])
-    #expect(p[2].rules.allSatisfy { $0.curve.points.map(\.celsius) == [40, 60, 80] && $0.curve.points.map(\.fraction) == [0.15, 0.5, 1.0] })
+    #expect(p[2].rules.allSatisfy { $0.curve.points.map(\.celsius) == [50, 70, 85] && $0.curve.points.map(\.fraction) == [0.2, 0.6, 1.0] })
 }
 @Test func builtInsDeterministic() {
     #expect(BuiltInProfiles.all() == BuiltInProfiles.all())

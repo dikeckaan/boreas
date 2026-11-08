@@ -153,3 +153,22 @@ private func sustainedState(_ temp: Double) -> EngineState {
     #expect(step(profile: p, cpu: 73, state: &s, t: 1) == [0: .manual(rpm: 2950)])
     #expect(step(profile: p, cpu: 70, state: &s, t: 2) == [0: .manual(rpm: 2755)])
 }
+
+private let builtInSilent = BuiltInProfiles.all().first { $0.builtIn == .silent }!
+
+@Test func groupIgnoresHotspotsWhenOtherMembersExist() {
+    let r = [reading("smc:TCMb", .cpu, 80, safety: true), reading("hid:PMU tdie0#1", .cpu, 105, hotspot: true)]
+    guard case .manual(let rpm)? = step(profile: builtInSilent, readings: r)[0] else { Issue.record("not manual"); return }
+    #expect(abs(rpm - 1585) < 1e-6)
+}
+@Test func groupFallsBackToHotspotsWhenOnlyHotspots() {
+    let r = [reading("hid:PMU tdie0#1", .cpu, 95, hotspot: true)]
+    guard case .manual(let rpm)? = step(profile: builtInSilent, readings: r)[0] else { Issue.record("not manual"); return }
+    #expect(abs(rpm - 3437.5) < 1e-6)
+}
+@Test func sensorRuleOnHotspotStillWorks() {
+    let id = "hid:PMU tdie0#1"
+    let p = profile(rules: [Rule(id: cpuRuleID, source: .sensor(SensorID(id)), curve: engineSilentCurve)])
+    let r = [reading("smc:TCMb", .cpu, 60), reading(id, .cpu, 75, hotspot: true)]
+    #expect(step(profile: p, readings: r) == [0: .manual(rpm: 2950)])
+}
