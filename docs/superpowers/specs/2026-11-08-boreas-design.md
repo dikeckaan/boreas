@@ -64,7 +64,8 @@ Onaylanan taslaklar: `docs/design/mockup-main-window-and-menubar.html` ve `docs/
 
 ### 5.3 Profil düzenleyici
 
-- Bir profilin içeriği: ad, uygulanacak fanlar ve bir ya da birden fazla **kural**.
+- **Mac genelinde tek bir etkin profil vardır.** Menü çubuğundaki ve üst çubuktaki seçici bunu gösterir. Her fanın modu ayrıca seçilir: Otomatik, Sabit devir ya da Profil (etkin profili izler). Profil seçmek, Profil modundaki fanları etkiler. Profil seçicide "Otomatik"i seçmek tüm fanları Otomatik'e alır. Seçicide başka bir profil seçilince, Otomatik moddaki fanlar Profil moduna geçer, Sabit devirdeki fanlar olduğu gibi kalır ve satırında "Sabit" rozeti görünür. *(Benim kararım.)*
+- Bir profilin içeriği: ad ve bir ya da birden fazla **kural**. Profil, Profil modundaki tüm fanlara uygulanır. Fanlara göre ayrı eğri v1'de yok; taslaktaki "Uygulanacak fanlar" alanı kaldırıldı. *(Benim kararım.)*
 - Her kural tek bir **sensör kaynağını** bir **eğriye** bağlar. Sensör kaynağı tek bir sensör ya da "CPU (en sıcak çekirdek)" gibi bir grup olabilir; grup, üyelerinin en yükseğidir.
 - Eğri, 2–8 noktalı (sıcaklık °C → devir) parçalı doğrusal bir fonksiyondur. Noktalar grafikte sürüklenerek düzenlenir. İlk noktanın solunda eğri sabit min devirde, son noktanın sağında sabit son devirde kalır.
 - Birden fazla kural varsa fan, **en yüksek devri isteyen kurala** uyar. Tek kural "yalnızca CPU'ya bak", çok kural "hangisi ısınırsa" anlamına gelir.
@@ -148,7 +149,10 @@ Kullanıcının makinesi Mac mini, Mac18,5, Apple M6, macOS 27.2. Salt okunur bi
 | `#KEY` | ui32 | 2066 | toplam anahtar sayısı |
 
 - `T` ile başlayan ve 5–130 aralığında `flt` değer dönen **125 sıcaklık anahtarı** var. Bazıları (`TPD*`) boşta 95–110 arası değer gösteriyor. Bunların gerçek °C sıcaklık olup olmadığı belirsiz; builder bunları doğrulamalı ve şüpheli olanları varsayılan listeden çıkarmalı.
-- **Yazma yolu henüz denenmedi.** `F0md = 1` ve ardından `F0Tg = rpm` yazımı ilk kez yardımcı servis yazıldığında, gözetim altında ve hemen ardından `F0md = 0` geri yüklemesiyle denenmeli.
+- **Yazma yolu henüz denenmedi. Planın ilk adımı bir geç/kal kapısıdır:**
+  - Arayüz, profiller ve sürüm işlerinden önce, en küçük imzalı yardımcı servis yazılır.
+  - Bu servisle `F0md = 1`, ardından `F0Tg = rpm` yazımı kullanıcı makinenin başındayken denenir. Kullanıcı servis onayını verir ve fan sesini dinler. Denemenin hemen ardından `F0md = 0` geri yüklenir.
+  - Yazma çalışmazsa (kilit anahtarı gerekiyorsa, sistem değeri geri alıyorsa vb.) iş durur ve bulgularla kullanıcıya dönülür. Sınırsız araştırma yapılmaz, sessizce yalnızca izleme yapan bir uygulamaya da geçilmez. *(Benim kararım.)*
 - **Diğer Apple Silicon çiplerinde** anahtar adları değişebilir (`F0Md` / `F0md`, bazılarında `Ftst` kilidi). Builder anahtar varlığına göre çalışan bir algılama katmanı yazmalı ve mod anahtarını sabit kodlamamalı. **Yalnızca bu Mac'te test edilebilecek.** Diğer çipler için README'de "topluluk testleri bekleniyor" notu yer almalı.
 - **Yapı hizalaması tuzağı:** `SMCParamStruct` C'de 80 bayttır. Swift'te iç içe struct'lar stride değil size kadar yer kapladığı için `keyInfo` sonrasına 3 bayt ve `data8` sonrasına 1 bayt açık dolgu eklenmeli. Deneme programı dolgu olmadan sessizce başarısız oldu.
 
@@ -173,7 +177,7 @@ Kullanıcının makinesi Mac mini, Mac18,5, Apple M6, macOS 27.2. Salt okunur bi
 2. **Uyku ve uyanma:** Uyku öncesinde fanlar Otomatik'e alınır. Uyanınca, uygulama bağlıysa etkin profil yeniden uygulanır.
 3. **Yardımcı servis sonlanırken** (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır.
 4. **Sensör okunamazsa** ya da değer saçmaysa (NaN, 0, 150°C üstü), o sensöre bağlı kural devre dışı kalır. Fanı yöneten hiçbir kural geçerli değilse fan Otomatik'e döner.
-5. **Kritik sıcaklık tavanı:** İzlenen CPU ya da GPU sensörlerinden herhangi biri bir tavanı aşarsa (varsayılan 100°C, ayarlanabilir değil), profil ne derse desin fan max devre alınır. Tavanın altına inildikten sonra 10°C histerezisle profile dönülür.
+5. **Kritik sıcaklık tavanı:** Yardımcı servis, kendi sabit **güvenlik sensörü kümesini** izler. Bu küme, doğrulanmış CPU ve GPU kalıp (die) sensörlerinden oluşur. Kullanıcı bu sensörleri gizleyemez ve profil ayarları onları etkilemez; şüpheli `TPD*` gibi anahtarlar kümeye girmez. Girdi, kümenin en yüksek değerinin **5 saniyelik hareketli ortalamasıdır**, böylece anlık sıçramalar tetiklemez. Bu ortalama 100°C'yi aşarsa, profil ne derse desin fan max devre alınır. Ortalama 90°C'nin altına inince profile geri dönülür. *(Benim kararım: Sensör kümesi ve ortalama süresi yazma testi sırasında gerçek yük altında doğrulanmalı.)*
 6. **Sabit devir, fanın gerçek min–max aralığına sıkıştırılır.**
 7. Sabit devirde de 5. kural geçerlidir.
 
@@ -186,7 +190,7 @@ Bu kuralların her biri birim testle (sahte SMC ile) ve elle test listesiyle do�
 - **Hedefler:** `Boreas` (uygulama), `BoreasHelper` (daemon), `BoreasCore` (paylaşılan model, eğri mantığı, SMC katmanı; test edilebilir framework ya da Swift paketi), `BoreasTests`.
 - **Dil ve sürüm:** Swift 6, SwiftUI. En düşük macOS sürümü builder'ın kararıdır; macOS 15 ya da üstü önerilir, Apple Silicon zorunludur.
 - **İmza:**
-  - Kullanıcının Apple geliştirici hesabı Xcode'da açık, ama bu Mac'in anahtar zincirinde **henüz imza sertifikası yok**. Geliştirme sırasında SMAppService daemon kaydı için imzalı derleme gerekir.
+  - Kullanıcının Apple geliştirici hesabı Xcode'da açık. Kullanıcı "developer imzam var" dedi; bu, ücretli Apple Developer Program üyeliği olarak kabul edildi. Developer ID ve noter onayı için bu üyelik gerekir. Ama bu Mac'in anahtar zincirinde **henüz imza sertifikası yok**. Geliştirme sırasında SMAppService daemon kaydı için imzalı derleme gerekir.
   - Kullanıcı Xcode → Settings → Accounts → Manage Certificates üzerinden önce **Apple Development**, sürüm için **Developer ID Application** sertifikası oluşturur. Bu adım kullanıcıya aittir; plan, buna gelmeden önce kullanıcıyı uyarmalı.
 - **Sürüm akışı (yerel betik):**
   1. Release derlemesi.
