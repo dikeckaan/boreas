@@ -24,6 +24,8 @@ public enum ControlEngine {
                             readings: [SensorReading], state: inout EngineState,
                             now: Date) -> [Int: FanCommand] {
         let tripped = state.ceiling.update(readings: readings, now: now)
+        // Without safety input there is no temperature guard: controlled fans go back to Apple.
+        let blind = state.ceiling.blind
         let dt = state.lastTick.map { now.timeIntervalSince($0) }
         defer { state.lastTick = now }
 
@@ -64,7 +66,9 @@ public enum ControlEngine {
                 command = profileCommand(fan: fan, profile: profile, rules: fractions)
             }
 
-            if tripped, mode != .auto {
+            if blind, mode != .auto {
+                command = .auto
+            } else if tripped, mode != .auto {
                 command = .manual(rpm: fan.max)
             } else if mode == .profile, case .manual(let target) = command,
                       profile?.behavior.smoothing == true,

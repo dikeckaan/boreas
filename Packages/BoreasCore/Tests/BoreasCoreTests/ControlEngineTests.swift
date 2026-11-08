@@ -172,3 +172,44 @@ private let builtInSilent = BuiltInProfiles.all().first { $0.builtIn == .silent 
     let r = [reading("smc:TCMb", .cpu, 60), reading(id, .cpu, 75, hotspot: true)]
     #expect(step(profile: p, readings: r) == [0: .manual(rpm: 2950)])
 }
+
+// Final review I1(a): blind fail-safe.
+@Test func fixedFanWithNoReadingsGoesAutoAfterWindow() {
+    var s = EngineState()
+    for i in 0...5 {
+        #expect(step(modes: [0: .fixed(rpm: 2000)], readings: [], state: &s, t: Double(i)) == [0: .manual(rpm: 2000)])
+    }
+    #expect(step(modes: [0: .fixed(rpm: 2000)], readings: [], state: &s, t: 6) == [0: .auto])
+    #expect(s.ceiling.blind)
+    #expect(s.lastRPM[0] == nil)
+}
+@Test func profileFanOnSingleNonSafetySensorGoesAutoAfterWindow() {
+    var s = EngineState()
+    let p = profile(rules: [Rule(source: .sensor(SensorID("smc:TaLP")), curve: engineSilentCurve)], smoothing: false)
+    let r = [reading("smc:TaLP", .other, 75)]
+    for i in 0...5 {
+        #expect(step(profile: p, readings: r, state: &s, t: Double(i)) == [0: .manual(rpm: 2950)])
+    }
+    #expect(step(profile: p, readings: r, state: &s, t: 6) == [0: .auto])
+    #expect(step(profile: p, readings: r, state: &s, t: 30) == [0: .auto])
+}
+@Test func controlResumesWhenSafetyInputReturns() {
+    var s = EngineState()
+    let p = profile(rules: [Rule(source: .sensor(SensorID("smc:TaLP")), curve: engineSilentCurve)], smoothing: false)
+    for i in 0...6 { step(profile: p, readings: [reading("smc:TaLP", .other, 75)], state: &s, t: Double(i)) }
+    #expect(s.ceiling.blind)
+    let back = [reading("smc:TaLP", .other, 75), reading("smc:Tp01", .cpu, 60, safety: true)]
+    #expect(step(profile: p, readings: back, state: &s, t: 7) == [0: .manual(rpm: 2950)])
+    #expect(!s.ceiling.blind)
+    #expect(step(modes: [0: .fixed(rpm: 2000)], readings: back, state: &s, t: 8) == [0: .manual(rpm: 2000)])
+}
+@Test func blindLeavesAutoFansAuto() {
+    var s = EngineState()
+    for i in 0...7 { #expect(step(modes: [0: .auto], readings: [], state: &s, t: Double(i)) == [0: .auto]) }
+}
+@Test func blindOverridesTrippedCeiling() {
+    var s = sustainedState(105)
+    #expect(s.ceiling.tripped)
+    // Last safety input at t=4; at t=10 the ceiling is blind: Apple's control, not max.
+    #expect(step(modes: [0: .fixed(rpm: 1200)], readings: [], state: &s, t: 10) == [0: .auto])
+}
