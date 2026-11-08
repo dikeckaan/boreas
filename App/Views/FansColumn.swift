@@ -8,7 +8,21 @@ struct FansColumn: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ColumnHeader("Fans").padding(.bottom, 8)
-                if model.snapshot?.ceilingTripped == true {
+                if model.snapshot?.catalogUnavailable == true {
+                    Label("Fan control is off: the helper could not load its sensor list. Reinstall Boreas.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 8)
+                }
+                if model.snapshot?.ceilingBlind == true {
+                    Label("No safety sensor readings: fans are on Automatic", systemImage: "eye.slash")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 8)
+                } else if model.snapshot?.ceilingTripped == true {
                     Label("Safety: full speed", systemImage: "flame.fill")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.orange)

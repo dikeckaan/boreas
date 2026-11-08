@@ -34,7 +34,7 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             Text("Set Up Fan Control")
                 .font(.title2.weight(.semibold))
-            Text("To change fan speeds, Boreas needs a small helper service with administrator rights. It runs only while Boreas is open, gives every fan back to Apple's automatic control when Boreas quits or the Mac sleeps, and accepts commands from Boreas alone. Temperatures can be read without it.")
+            Text("To change fan speeds, Boreas needs a small helper service with administrator rights. It starts on demand, and once at startup to make sure the fans are on Apple's automatic control, then exits when idle. It gives every fan back to Apple's automatic control when Boreas quits or the Mac sleeps, and accepts commands from Boreas alone. Temperatures can be read without it.")
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)

@@ -60,10 +60,15 @@ struct SettingsView: View {
                     Text(error).font(.caption).foregroundStyle(.orange)
                 }
                 if model.removeNeedsForce {
-                    Text("The fans could not be handed back to macOS. Remove the service anyway; macOS resets the fans when it stops.")
+                    Text("The fans could not be handed back to macOS. You can remove the service anyway; Boreas then checks whether a fan is still under manual control.")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Remove Anyway", role: .destructive) { run { await model.removeHelper(force: true) } }
                         .disabled(working || AppModel.localOnly)
+                }
+                if model.fanManualAfterForcedRemoval {
+                    Label("A fan is still under manual control. Restart the Mac or run `sudo boreasctl auto`.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
                 }
                 HStack {
                     Button("Reinstall") { run { await model.reinstallHelper() } }

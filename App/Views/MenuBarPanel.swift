@@ -62,7 +62,7 @@ struct MenuBarPanel: View {
                 ForEach(model.fans, id: \.index) { fan in
                     FanRow(model: model, fan: fan)
                 }
-                if model.snapshot?.ceilingTripped == true {
+                if model.snapshot?.ceilingTripped == true, model.snapshot?.ceilingBlind != true {
                     Label("Safety: full speed", systemImage: "flame.fill")
                         .font(.callout)
                         .foregroundStyle(.orange)

@@ -35,6 +35,9 @@ final class AppModel {
     private(set) var installError: String?
     /// The last Remove stopped because the fans could not be reset; Settings offers "Remove Anyway".
     private(set) var removeNeedsForce = false
+    /// After "Remove Anyway", a local read-only check found a fan still under manual control (or
+    /// could not read the fans at all).
+    private(set) var fanManualAfterForcedRemoval = false
     /// Number of fans, nil until the first reading.
     private(set) var fanCount: Int?
 
@@ -151,9 +154,24 @@ final class AppModel {
         guard !Self.localOnly, !lifecycle.removing else { return }
         installError = nil
         removeNeedsForce = false
+        fanManualAfterForcedRemoval = false
         let ok = await tearDownHelper(force: force)
         if ok { await refreshStatus() }
+        if force {
+            // The reset failed, so nothing guarantees the fans are back on Apple's control: look.
+            try? await Task.sleep(for: .seconds(1))
+            fanManualAfterForcedRemoval = await Task.detached(priority: .userInitiated) {
+                Self.anyFanManualLocally()
+            }.value
+        }
         lifecycle.finish()
+    }
+
+    /// Read-only local check (no helper): true if any fan reports manual, or the fans cannot be read.
+    nonisolated private static func anyFanManualLocally() -> Bool {
+        guard let smc = try? IOKitSMCClient() else { return true }
+        let fans = FanController(smc: smc)
+        return (0..<fans.fanCount).contains { fans.isManual(fan: $0) }
     }
 
     /// Remove, then install again. A failed reset does not stop it; its error stays visible.
@@ -161,6 +179,7 @@ final class AppModel {
         guard !Self.localOnly, !lifecycle.removing else { return }
         installError = nil
         removeNeedsForce = false
+        fanManualAfterForcedRemoval = false
         let ok = await tearDownHelper(force: true)
         if ok { await refreshStatus() }
         let resetError = installError

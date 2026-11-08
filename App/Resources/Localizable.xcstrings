@@ -121,6 +121,16 @@
         }
       }
     },
+    "A fan is still under manual control. Restart the Mac or run `sudo boreasctl auto`." : {
+      "localizations" : {
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir fan hâlâ elle kontrol ediliyor. Mac’i yeniden başlatın ya da `sudo boreasctl auto` komutunu çalıştırın."
+          }
+        }
+      }
+    },
     "Add sensor rule" : {
       "localizations" : {
         "tr" : {
@@ -347,6 +357,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fan %lld"
+          }
+        }
+      }
+    },
+    "Fan control is off: the helper could not load its sensor list. Reinstall Boreas." : {
+      "localizations" : {
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fan kontrolü kapalı: yardımcı servis sensör listesini yükleyemedi. Boreas’ı yeniden yükleyin."
           }
         }
       }
@@ -647,6 +667,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kural seçilmedi"
+          }
+        }
+      }
+    },
+    "No safety sensor readings: fans are on Automatic" : {
+      "localizations" : {
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Güvenlik sensörlerinden veri yok: fanlar Otomatik modda"
           }
         }
       }
@@ -1131,12 +1161,12 @@
         }
       }
     },
-    "The fans could not be handed back to macOS. Remove the service anyway; macOS resets the fans when it stops." : {
+    "The fans could not be handed back to macOS. You can remove the service anyway; Boreas then checks whether a fan is still under manual control." : {
       "localizations" : {
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fanlar macOS’e geri verilemedi. Servisi yine de kaldırabilirsiniz; servis durduğunda macOS fanları kendisi sıfırlar."
+            "value" : "Fanlar macOS’e geri verilemedi. Servisi yine de kaldırabilirsiniz; ardından Boreas, hâlâ elle kontrol edilen bir fan olup olmadığını denetler."
           }
         }
       }
@@ -1211,12 +1241,12 @@
         }
       }
     },
-    "To change fan speeds, Boreas needs a small helper service with administrator rights. It runs only while Boreas is open, gives every fan back to Apple's automatic control when Boreas quits or the Mac sleeps, and accepts commands from Boreas alone. Temperatures can be read without it." : {
+    "To change fan speeds, Boreas needs a small helper service with administrator rights. It starts on demand, and once at startup to make sure the fans are on Apple's automatic control, then exits when idle. It gives every fan back to Apple's automatic control when Boreas quits or the Mac sleeps, and accepts commands from Boreas alone. Temperatures can be read without it." : {
       "localizations" : {
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boreas’ın fan hızlarını değiştirebilmesi için yönetici yetkisiyle çalışan küçük bir yardımcı servis gerekir. Servis yalnızca Boreas açıkken çalışır, Boreas kapandığında ya da Mac uyku moduna geçtiğinde tüm fanları Apple’ın otomatik kontrolüne geri verir ve yalnızca Boreas’tan komut alır. Sıcaklıkları görmek için servise gerek yoktur."
+            "value" : "Boreas’ın fan hızlarını değiştirebilmesi için yönetici yetkisiyle çalışan küçük bir yardımcı servis gerekir. Servis gerektiğinde başlar; Mac açılırken de bir kez çalışıp fanların Apple’ın otomatik kontrolünde olduğundan emin olur, işi bitince kapanır. Boreas kapandığında ya da Mac uyku moduna geçtiğinde tüm fanları Apple’ın otomatik kontrolüne geri verir ve yalnızca Boreas’tan komut alır. Sıcaklıkları görmek için servise gerek yoktur."
           }
         }
       }
