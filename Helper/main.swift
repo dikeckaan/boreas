@@ -34,10 +34,19 @@ private func embeddedInfoPlist() -> [String: Any] {
 
 /// Only Boreas.app signed by our team may connect. nil (refuse everyone) if the Team ID is
 /// missing or malformed; it is also validated so it cannot inject into the requirement string.
+/// Release builds also require the Developer ID markers (Developer ID CA intermediate and
+/// Developer ID Application leaf); Debug builds keep the plain requirement so development-signed
+/// apps can still connect.
 private func clientRequirement(teamID: String?) -> String? {
     guard let teamID, teamID.count == 10,
           teamID.allSatisfy({ ("A"..."Z").contains($0) || ("0"..."9").contains($0) }) else { return nil }
-    return "anchor apple generic and identifier \"com.kaandikec.boreas\" and certificate leaf[subject.OU] = \"\(teamID)\""
+    let base = "anchor apple generic and identifier \"com.kaandikec.boreas\" and certificate leaf[subject.OU] = \"\(teamID)\""
+    #if DEBUG
+    return base
+    #else
+    return base + " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+        + " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+    #endif
 }
 
 /// Monotonic, keeps counting during sleep, never jumps with wall-clock changes.

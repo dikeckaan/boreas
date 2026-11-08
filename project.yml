@@ -35,6 +35,7 @@ targets:
       - path: Helper
         excludes:
           - "*.plist"
+          - "*.entitlements"
     dependencies:
       - package: BoreasCore
         product: BoreasCore
@@ -50,6 +51,9 @@ targets:
       base:
         PRODUCT_NAME: BoreasHelper
         PRODUCT_BUNDLE_IDENTIFIER: com.kaandikec.boreas.helper
+        # No entitlements at all: a Developer ID daemon has no provisioning profile, so
+        # com.apple.application-identifier (which Xcode otherwise injects) must not be claimed.
+        CODE_SIGN_ENTITLEMENTS: Helper/BoreasHelper.entitlements
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         SKIP_INSTALL: YES
         # A root daemon with no UI: nothing to translate.
