@@ -1,0 +1,87 @@
+name: Boreas
+
+options:
+  bundleIdPrefix: com.kaandikec
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+# Team ID lives in the gitignored Config/Signing.xcconfig (see Config/Signing.xcconfig.example).
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+packages:
+  BoreasCore:
+    path: Packages/BoreasCore
+
+targets:
+  BoreasHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helper
+        excludes:
+          - "*.plist"
+    dependencies:
+      - package: BoreasCore
+        product: BoreasCore
+    info:
+      path: Helper/Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        BoreasTeamID: $(DEVELOPMENT_TEAM)
+    settings:
+      base:
+        PRODUCT_NAME: BoreasHelper
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaandikec.boreas.helper
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        SKIP_INSTALL: YES
+
+  Boreas:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+      - path: Helper/com.kaandikec.boreas.helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - target: BoreasHelper
+        embed: true
+        codeSign: false
+        copy:
+          destination: executables
+      # Also embeds BoreasCore_BoreasCore.bundle (sensor catalog) in Contents/Resources. The
+      # helper relies on it: its Bundle.module looks in Bundle.main.resourceURL, i.e. the app's.
+      - package: BoreasCore
+        product: BoreasCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Boreas
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        LSUIElement: true
+        BoreasTeamID: $(DEVELOPMENT_TEAM)
+    settings:
+      base:
+        PRODUCT_NAME: Boreas
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaandikec.boreas
