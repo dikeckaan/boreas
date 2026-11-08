@@ -37,3 +37,31 @@ import Testing
   #expect(throws: SMCError.ioFailure(-1)) { try smc.write("F0md", bytes: [1]) }
   #expect(smc.writes.isEmpty)
 }
+@Test func encodeNegativeSp78RoundTrip() {
+  let b = SMCValue.encode(-12.5, as: .sp78)
+  #expect(SMCValue(key: "TC0P", type: "sp78", bytes: b).doubleValue == -12.5)
+}
+@Test func encodeClampsNonFiniteAndOutOfRange() {
+  func e(_ v: Double, _ t: SMCDataType) -> [UInt8] { SMCValue.encode(v, as: t) }
+  // ui8 / flag
+  for t in [SMCDataType.ui8, .flag] {
+    #expect(e(.infinity, t) == [255]); #expect(e(-.infinity, t) == [0])
+    #expect(e(.nan, t) == [0]); #expect(e(-5, t) == [0]); #expect(e(1e30, t) == [255])
+  }
+  #expect(e(.infinity, .ui16) == [0xFF, 0xFF]); #expect(e(-.infinity, .ui16) == [0, 0])
+  #expect(e(.nan, .ui16) == [0, 0]); #expect(e(-5, .ui16) == [0, 0]); #expect(e(1e30, .ui16) == [0xFF, 0xFF])
+  #expect(e(.infinity, .ui32) == [0xFF, 0xFF, 0xFF, 0xFF]); #expect(e(-.infinity, .ui32) == [0, 0, 0, 0])
+  #expect(e(.nan, .ui32) == [0, 0, 0, 0]); #expect(e(-5, .ui32) == [0, 0, 0, 0]); #expect(e(1e30, .ui32) == [0xFF, 0xFF, 0xFF, 0xFF])
+  #expect(e(.infinity, .fpe2) == [0xFF, 0xFF]); #expect(e(-.infinity, .fpe2) == [0, 0])
+  #expect(e(.nan, .fpe2) == [0, 0]); #expect(e(-5, .fpe2) == [0, 0]); #expect(e(1e30, .fpe2) == [0xFF, 0xFF])
+  #expect(e(.infinity, .sp78) == [0x7F, 0xFF]); #expect(e(-.infinity, .sp78) == [0x80, 0x00])
+  #expect(e(.nan, .sp78) == [0, 0]); #expect(e(1e30, .sp78) == [0x7F, 0xFF])
+  #expect(SMCValue(key: "XXXX", type: "sp78", bytes: e(-5, .sp78)).doubleValue == -5)
+  // flt: finite max magnitude, NaN -> 0
+  let max = Float.greatestFiniteMagnitude
+  #expect(SMCValue(key: "XXXX", type: "flt ", bytes: e(.infinity, .flt)).doubleValue == Double(max))
+  #expect(SMCValue(key: "XXXX", type: "flt ", bytes: e(-.infinity, .flt)).doubleValue == -Double(max))
+  #expect(e(.nan, .flt) == [0, 0, 0, 0])
+  #expect(SMCValue(key: "XXXX", type: "flt ", bytes: e(-5, .flt)).doubleValue == -5)
+  #expect(SMCValue(key: "XXXX", type: "flt ", bytes: e(1e30, .flt)).doubleValue == Double(Float(1e30)))
+}

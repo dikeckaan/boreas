@@ -47,24 +47,30 @@ public struct SMCValue: Sendable {
         }
     }
 
+    /// Clamps in Double first (NaN -> 0) so integer conversion can never trap.
+    private static func clamped(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        v.isNaN ? 0 : min(max(v, lo), hi)
+    }
+
     public static func encode(_ v: Double, as type: SMCDataType) -> [UInt8] {
         switch type {
         case .flt:
-            let bits = Float(v).bitPattern
+            let f = Float(clamped(v, -Double(Float.greatestFiniteMagnitude), Double(Float.greatestFiniteMagnitude)))
+            let bits = f.bitPattern
             return [UInt8(bits & 0xFF), UInt8((bits >> 8) & 0xFF), UInt8((bits >> 16) & 0xFF), UInt8(bits >> 24)]
         case .ui8, .flag:
-            return [UInt8(clamping: Int(v.rounded()))]
+            return [UInt8(clamped(v, 0, 255).rounded())]
         case .ui16:
-            let n = UInt16(clamping: Int(v.rounded()))
+            let n = UInt16(clamped(v, 0, 65535).rounded())
             return [UInt8(n >> 8), UInt8(n & 0xFF)]
         case .ui32:
-            let n = UInt32(clamping: Int(v.rounded()))
+            let n = UInt32(clamped(v, 0, 4294967295).rounded())
             return [UInt8(n >> 24), UInt8((n >> 16) & 0xFF), UInt8((n >> 8) & 0xFF), UInt8(n & 0xFF)]
         case .sp78:
-            let n = UInt16(bitPattern: Int16(clamping: Int((v * 256).rounded())))
+            let n = UInt16(bitPattern: Int16(clamped(v * 256, -32768, 32767).rounded()))
             return [UInt8(n >> 8), UInt8(n & 0xFF)]
         case .fpe2:
-            let n = UInt16(clamping: Int((v * 4).rounded()))
+            let n = UInt16(clamped(v * 4, 0, 65535).rounded())
             return [UInt8(n >> 8), UInt8(n & 0xFF)]
         }
     }
