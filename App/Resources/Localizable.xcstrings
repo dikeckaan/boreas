@@ -361,6 +361,16 @@
         }
       }
     },
+    "Fan control helper isn't responding. Use Settings › Reinstall Helper, or restart your Mac." : {
+      "localizations" : {
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fan kontrolü yardımcı servisi yanıt vermiyor. Ayarlar › Yeniden Kur’u kullanın veya Mac’inizi yeniden başlatın."
+          }
+        }
+      }
+    },
     "Fan control is off: the helper could not load its sensor list. Reinstall Boreas." : {
       "localizations" : {
         "tr" : {

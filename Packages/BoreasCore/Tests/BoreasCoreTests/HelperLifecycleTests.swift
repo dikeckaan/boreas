@@ -89,3 +89,63 @@ private final class FakeSteps: HelperServiceSteps {
     // User turned it off after the first run: the flag stays set, so no re-registering.
     #expect(!LoginItemPolicy.shouldRegisterOnThisLaunch(didInitialSetup: true, localOnly: false))
 }
+
+// MARK: - HelperReachability
+
+private let reachT0 = ContinuousClock.now
+
+@Test func shortFailuresDoNotRepair() {
+    var r = HelperReachability()
+    #expect(r.snapshotFailed(at: reachT0, enabled: true) == .none)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(9), enabled: true) == .none)
+    #expect(!r.isUnreachable && !r.showsWarning)
+}
+
+@Test func tenSecondsOfFailuresRepairsExactlyOnce() {
+    var r = HelperReachability()
+    _ = r.snapshotFailed(at: reachT0, enabled: true)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(10), enabled: true) == .repair)
+    #expect(r.isUnreachable)
+    // Further failures while the repair is pending/running do not ask again.
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(12), enabled: true) == .none)
+    #expect(!r.showsWarning)   // the repair has not been given a chance yet
+}
+
+@Test func successResetsTheTimer() {
+    var r = HelperReachability()
+    _ = r.snapshotFailed(at: reachT0, enabled: true)
+    _ = r.snapshotFailed(at: reachT0 + .seconds(8), enabled: true)
+    r.snapshotSucceeded()
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(9), enabled: true) == .none)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(18), enabled: true) == .none)   // only 9 s since new start
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(19), enabled: true) == .repair)
+}
+
+@Test func secondUnreachablePeriodWarnsWithoutRepair() {
+    var r = HelperReachability()
+    _ = r.snapshotFailed(at: reachT0, enabled: true)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(10), enabled: true) == .repair)
+    r.repairFinished()
+    #expect(!r.showsWarning)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(11), enabled: true) == .none)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(21), enabled: true) == .none)
+    #expect(r.isUnreachable && r.showsWarning)
+    // Recovery clears the warning; a later outage never repairs again in this launch.
+    r.snapshotSucceeded()
+    #expect(!r.showsWarning)
+    _ = r.snapshotFailed(at: reachT0 + .seconds(100), enabled: true)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(120), enabled: true) == .none)
+    #expect(r.showsWarning)
+}
+
+@Test func nonEnabledStatusNeverRepairs() {
+    var r = HelperReachability()
+    _ = r.snapshotFailed(at: reachT0, enabled: false)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(60), enabled: false) == .none)
+    #expect(!r.isUnreachable)
+    // Leaving .enabled drops an earlier failure streak.
+    _ = r.snapshotFailed(at: reachT0 + .seconds(61), enabled: true)
+    _ = r.snapshotFailed(at: reachT0 + .seconds(65), enabled: false)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(70), enabled: true) == .none)
+    #expect(r.snapshotFailed(at: reachT0 + .seconds(80), enabled: true) == .repair)
+}

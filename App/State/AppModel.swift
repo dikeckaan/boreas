@@ -29,6 +29,8 @@ final class AppModel {
     private(set) var isLocal = true
     /// Last helper communication error (snapshot failed), nil once a snapshot succeeds again.
     private(set) var helperError: String?
+    /// The helper is enabled but stayed silent even after the one automatic repair (persistent warning).
+    private(set) var helperUnresponsive = false
     /// Last configuration the helper refused or did not receive, nil once one is accepted.
     private(set) var configurationError: String?
     /// Error from the last install attempt, shown by the onboarding view and Settings.
@@ -55,6 +57,8 @@ final class AppModel {
     /// has answered a snapshot and passed the version check.
     @ObservationIgnored private let lifecycle = HelperLifecycle()
     @ObservationIgnored private var versionChecked = false
+    /// Tracks continuous snapshot failure; allows one automatic repair per launch.
+    @ObservationIgnored private var reachability = HelperReachability()
     @ObservationIgnored private var quitting = false
     /// Set when `register()` failed because the daemon plist or executable is missing.
     @ObservationIgnored private var registrationMissing = false
@@ -188,6 +192,25 @@ final class AppModel {
         lifecycle.finish()
     }
 
+    /// The helper is registered and "enabled" but has not answered for a while (launchd may refuse
+    /// to start it, e.g. after a signing change). Runs once per launch: forced teardown (the fan
+    /// reset is expected to fail and is ignored), register again, refresh the status. A status of
+    /// `requiresApproval` is then handled by the normal onboarding flow. Blocks sync like Remove.
+    private func repairUnreachableHelper() async {
+        guard !Self.localOnly, !quitting, !lifecycle.removing else { return }
+        log.notice("helper unreachable, repairing once")
+        installError = nil
+        let ok = await tearDownHelper(force: true)
+        installError = nil
+        if ok {
+            await refreshStatus()
+            await installHelper()
+        }
+        reachability.repairFinished()
+        helperUnresponsive = false
+        lifecycle.finish()
+    }
+
     /// Waits out an in-flight configuration send, then runs the teardown. False when it stopped
     /// early (reset failed without `force`).
     private func tearDownHelper(force: Bool) async -> Bool {
@@ -288,6 +311,8 @@ final class AppModel {
                 let s = try await client.snapshot()
                 if quitting || lifecycle.removing { return }
                 helperError = nil
+                reachability.snapshotSucceeded()
+                helperUnresponsive = false
                 record(s)
                 // Configuration goes out only once this connection has answered and the helper
                 // is known to speak this app's format.
@@ -299,7 +324,13 @@ final class AppModel {
             } catch {
                 log.error("snapshot failed: \(String(describing: error), privacy: .public)")
                 helperError = error.localizedDescription
+                let action = reachability.snapshotFailed(at: .now, enabled: helperStatus == .enabled)
+                helperUnresponsive = reachability.showsWarning
+                if action == .repair { await repairUnreachableHelper() }
             }
+        } else {
+            _ = reachability.snapshotFailed(at: .now, enabled: false)
+            helperUnresponsive = false
         }
         await readLocally()
     }

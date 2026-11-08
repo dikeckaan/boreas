@@ -83,3 +83,57 @@ public enum LoginItemPolicy {
         !localOnly && !didInitialSetup
     }
 }
+
+/// Notices a helper that is "enabled" for launchd but never answers (for example launchd refuses to
+/// start it after a signing change), and allows exactly one automatic repair per app launch.
+public struct HelperReachability: Sendable {
+    public enum Action: Equatable, Sendable { case none, repair }
+
+    /// Continuous snapshot failure after which the helper counts as unreachable.
+    public static let threshold: Duration = .seconds(10)
+
+    private var failingSince: ContinuousClock.Instant?
+    private var repairUsed = false
+    /// Failures went on for `threshold` while the helper is enabled; cleared by a success.
+    public private(set) var isUnreachable = false
+    /// Unreachable again after the one repair: the UI shows the persistent warning.
+    public private(set) var showsWarning = false
+
+    public init() {}
+
+    /// A snapshot succeeded: the timer and any warning reset.
+    public mutating func snapshotSucceeded() {
+        failingSince = nil
+        isUnreachable = false
+        showsWarning = false
+    }
+
+    /// A snapshot failed at `now`. `.repair` is returned at most once per launch.
+    public mutating func snapshotFailed(at now: ContinuousClock.Instant, enabled: Bool) -> Action {
+        guard enabled else {
+            failingSince = nil
+            isUnreachable = false
+            showsWarning = false
+            return .none
+        }
+        let start = failingSince ?? now
+        failingSince = start
+        guard now - start >= Self.threshold else { return .none }
+        if isUnreachable { return .none }
+        isUnreachable = true
+        if repairUsed {
+            showsWarning = true
+            return .none
+        }
+        repairUsed = true
+        return .repair
+    }
+
+    /// The repair (reset, register, status refresh) is done: the failure timer starts afresh, so
+    /// the warning only appears if the helper stays silent for another `threshold`.
+    public mutating func repairFinished() {
+        failingSince = nil
+        isUnreachable = false
+        showsWarning = false
+    }
+}

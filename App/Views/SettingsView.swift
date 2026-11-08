@@ -56,6 +56,11 @@ struct SettingsView: View {
 
             Section("Fan control service") {
                 LabeledContent("Status") { statusLabel }
+                if model.helperUnresponsive {
+                    Label("Fan control helper isn't responding. Use Settings › Reinstall Helper, or restart your Mac.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 if let error = model.installError {
                     Text(error).font(.caption).foregroundStyle(.orange)
                 }

@@ -55,6 +55,15 @@ struct MenuBarPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if model.helperUnresponsive {
+                Label("Fan control helper isn't responding. Use Settings › Reinstall Helper, or restart your Mac.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+            }
             if model.hasFans {
                 SectionHeader("Profile")
                 profileSection
