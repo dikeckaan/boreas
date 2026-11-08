@@ -33,7 +33,7 @@ Boreas bir fanı asla elle modda takılı bırakmaz. Şu kurallar kapatılamaz. 
 2. Uykudan önce fanlar Otomatik'e alınır; uyanınca uygulama çalışıyorsa etkin profil yeniden uygulanır. *Birim testli; uyku/uyanma donanımda henüz doğrulanmadı.*
 3. Yardımcı servis sonlanırken (SIGTERM, kaldırma, güncelleme) fanlar Otomatik'e alınır. *Birim testli; SIGTERM donanımda henüz doğrulanmadı.*
 4. Bir sensör okunamazsa ya da değer saçmaysa (NaN, 0, 150 °C üstü), ona bağlı kurallar devre dışı kalır; geçerli kural kalmazsa fan Otomatik'e döner. *Birim testli.*
-5. Kritik sıcaklık tavanı, sabit bir CPU ve GPU güvenlik sensörü kümesini izler. Bunların 5 saniyelik ortalaması 100 °C'yi aşarsa, profil ne derse desin fan maksimuma alınır; ortalama 90 °C'nin altına inince profile dönülür. Bu sensörleri tavandan gizleyemezsiniz. *Birim testli; gerçek yük altında henüz doğrulanmadı.*
+5. Kritik sıcaklık tavanı, sabit bir CPU ve GPU güvenlik sensörü kümesini izler. Bunların 5 saniyelik ortalaması 100 °C'yi aşarsa, profil ne derse desin fan maksimuma alınır; ortalama 90 °C'nin altına inince profile dönülür. Bu sensörleri tavandan gizleyemezsiniz. Ne bu sensörlerden ne de yedek CPU/GPU sensörlerinden 5 saniyeden uzun süre geçerli değer gelmezse, Boreas'ın kontrolündeki tüm fanlar değer yeniden gelene kadar Otomatik'e döner; sensör kataloğunu yükleyemeyen yardımcı servis elle kontrolü tümüyle reddeder. *Birim testli; gerçek yük altında henüz doğrulanmadı.*
 6. Sabit devir, fanın gerçek en düşük ve en yüksek değerine sıkıştırılır. *Birim testli.*
 
 Donanımda ayrıca doğrulandı: yardımcı servis boştayken kendiliğinden çıkar, yeniden açılan uygulama profili yeniden uygular ve `boreasctl set` yazma testi fanı Otomatik'e döndürür. Henüz doğrulanmadı: yetkisiz bir istemcinin yardımcı servisle konuşamadığı.
@@ -62,7 +62,18 @@ open Boreas.xcodeproj
 DEVELOPMENT_TEAM = XXXXXXXXXX
 ```
 
-Birim testleri için `cd Packages/BoreasCore && swift test` çalıştırın. Sürüm DMG'si için `scripts/release.sh <sürüm> --skip-notarize` (deneme çalıştırması); bayrak olmadan `boreas-notary` notarytool anahtar zinciri profiliyle Apple onayı (notarization) alınır (betiğin başındaki açıklamaya bakın). Fork'lar `scripts/ExportOptions.plist` içindeki Team ID'yi değiştirmelidir.
+Birim testleri için `cd Packages/BoreasCore && swift test` çalıştırın. Sürüm DMG'si için `scripts/release.sh <sürüm> --skip-notarize` (deneme çalıştırması); bayrak olmadan `boreas-notary` notarytool anahtar zinciri profiliyle Apple onayı (notarization) alınır (betiğin başındaki açıklamaya bakın).
+
+### Fork
+
+`com.kaandikec` tanımlayıcısı koda gömülüdür. Kendi derlemesini dağıtacak bir fork, onu geçtiği her yerde değiştirmelidir; yoksa yardımcı servisi asıl Boreas'la çakışır ya da bağlantıları reddeder:
+
+- `project.yml`: `bundleIdPrefix`, iki `PRODUCT_BUNDLE_IDENTIFIER` değeri ve launchd plist dosyasının yolu.
+- `Helper/main.swift`: istemci kod imzası gereksinimindeki uygulama kimliği (`identifier "com.kaandikec.boreas"`).
+- `Packages/BoreasCore/Sources/BoreasCore/Helper/HelperXPC.swift`: `boreasHelperMachServiceName`.
+- `Helper/com.kaandikec.boreas.helper.plist`: dosya adı, `Label`, `MachServices` anahtarı ve `AssociatedBundleIdentifiers`.
+- `App/Services/HelperInstaller.swift`: `plistName` (plist dosya adıyla aynı olmalı).
+- `scripts/ExportOptions.plist`: `teamID` (kendi Team ID'niz).
 
 ## boreasctl
 

@@ -33,7 +33,7 @@ Boreas never leaves a fan stuck in manual mode. These rules cannot be switched o
 2. Before sleep the fans go to Automatic; after wake the active profile is re-applied if the app is running. *Unit-tested; sleep/wake not yet verified on hardware.*
 3. When the helper itself stops (SIGTERM, removal, update), fans go to Automatic. *Unit-tested; SIGTERM not yet verified on hardware.*
 4. If a sensor cannot be read or reports a nonsense value (NaN, 0, above 150 °C), rules that depend on it are ignored; with no valid rule left, the fan returns to Automatic. *Unit-tested.*
-5. A critical-temperature ceiling watches a fixed set of CPU and GPU safety sensors. If their 5-second average passes 100 °C, the fan goes to maximum whatever the profile says, until the average drops below 90 °C. You cannot hide these sensors from it. *Unit-tested; not yet verified under real load.*
+5. A critical-temperature ceiling watches a fixed set of CPU and GPU safety sensors. If their 5-second average passes 100 °C, the fan goes to maximum whatever the profile says, until the average drops below 90 °C. You cannot hide these sensors from it. If neither these sensors nor a CPU/GPU fallback give a valid reading for more than 5 seconds, every fan under Boreas's control goes back to Automatic until they do; a helper that cannot load its sensor catalog refuses manual control altogether. *Unit-tested; not yet verified under real load.*
 6. Fixed speeds are clamped to the fan's real minimum and maximum. *Unit-tested.*
 
 Also verified on hardware: the helper exits by itself when idle, a relaunched app re-applies the profile, and the `boreasctl set` write gate returns the fan to Automatic. Not yet verified: that an unauthorized client cannot talk to the helper.
@@ -62,7 +62,18 @@ open Boreas.xcodeproj
 DEVELOPMENT_TEAM = XXXXXXXXXX
 ```
 
-Run the unit tests with `cd Packages/BoreasCore && swift test`. Build a release DMG with `scripts/release.sh <version> --skip-notarize` (a dry run; without the flag it notarizes with the `boreas-notary` notarytool keychain profile, see the script header). Forks should change the team ID in `scripts/ExportOptions.plist`.
+Run the unit tests with `cd Packages/BoreasCore && swift test`. Build a release DMG with `scripts/release.sh <version> --skip-notarize` (a dry run; without the flag it notarizes with the `boreas-notary` notarytool keychain profile, see the script header).
+
+### Forking
+
+The identifier `com.kaandikec` is baked in. A fork that ships its own build must replace it everywhere it appears, or its helper will collide with (or refuse) the original:
+
+- `project.yml`: `bundleIdPrefix`, both `PRODUCT_BUNDLE_IDENTIFIER` values and the path of the launchd plist.
+- `Helper/main.swift`: the app identifier in the client code-signing requirement (`identifier "com.kaandikec.boreas"`).
+- `Packages/BoreasCore/Sources/BoreasCore/Helper/HelperXPC.swift`: `boreasHelperMachServiceName`.
+- `Helper/com.kaandikec.boreas.helper.plist`: the file name, `Label`, the `MachServices` key and `AssociatedBundleIdentifiers`.
+- `App/Services/HelperInstaller.swift`: `plistName` (must match the plist file name).
+- `scripts/ExportOptions.plist`: `teamID` (your own Team ID).
 
 ## boreasctl
 

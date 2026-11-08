@@ -20,7 +20,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 - ☐ Rule 2: wake the Mac with the app quit → fans stay on Automatic.
 - ☐ Rule 3: `sudo launchctl kill TERM system/com.kaandikec.boreas.helper` while a profile drives the fan → fan returns to Automatic.
 - ☐ Rule 3: Remove the helper from Settings while a profile is active → fan returns to Automatic before the helper is unregistered.
-- ☐ Rule 4: hide, or unplug/disable the sensor a rule uses (hiding only changes the view) → hiding keeps the rule running; a sensor that disappears makes the rule invalid, and with no valid rule left the fan returns to Automatic.
+- ☐ Rule 4: quit Boreas, edit `~/Library/Application Support/Boreas/settings.json` so the only rule of a custom profile reads `"source":{"kind":"sensor","value":"smc:ZZZZ"}` (a sensor this Mac does not have), relaunch, make that profile active with the fan on Profile → within 2 s the fan is on Automatic (`boreasctl fans` agrees) and the editor shows the rule's source as "(missing) smc:ZZZZ".
 - ☐ Rule 5: with the fan on a low fixed speed under heavy CPU+GPU load, the safety-sensor average passes 100 °C → fan goes to max, and returns to the profile once the average is below 90 °C.
 - ☐ Rule 6: set a fixed speed outside the fan's range (drag the slider to both ends) → the value is clamped to the fan's real min–max.
 - ☐ Authorization: run an ad-hoc-signed test client (different identity than Boreas) that connects to the helper's Mach service → the connection is rejected; the fan state is unchanged.
@@ -28,6 +28,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 ## Install and service
 
 - ☐ Close every window but leave the app running → the profile keeps driving the fan (the loop lives in the helper).
+- ☐ Single instance: with Boreas running, launch a second copy (`open -n /Applications/Boreas.app`) → the second copy quits at once, the first stays in control and the fan state does not change.
 - ☐ First launch from the DMG-installed copy in /Applications → welcome screen explains the one-time "Allow in the Background" step.
 - ☐ Approval guide panel: on a Turkish macOS, the floating guide appears beside System Settings (not on top of the toggle) and closes itself once the helper is enabled.
 - ☐ Approval guide panel: on an English macOS, same placement and auto-close.
@@ -45,7 +46,7 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 - ☐ Fans table: actual, min, max and mode match `boreasctl fans`.
 - ☐ Automatic → Fixed → Automatic from the menu bar panel → the fan follows and ends on Automatic.
 - ☐ Fixed speed slider in the main window → the fan reaches the requested rpm within a few seconds.
-- ☐ Selecting each built-in profile (Silent, Balanced, Performance) → the fan speed follows the curve under load.
+- ☐ Selecting each built-in profile (Silent, Performance) → the fan speed follows the curve under load.
 - ☐ A Mac with no fans (MacBook Air): the app shows only sensors, does not offer service installation, does not crash.
 - ☐ Sensors: hide, star and rename a sensor → the choice survives a restart; the active profile keeps working.
 
@@ -67,6 +68,8 @@ Never run these on a Mac whose fans you cannot watch. In every case the fan must
 - ☐ Switch the system language back to English → no leftover Turkish strings.
 
 ## Release package
+
+- ☐ Release gate: install from the exported DMG build (not Debug), Install Helper, approve, run a profile, `kill -9` the app → Automatic; Quit → Automatic.
 
 - ☐ `scripts/release.sh <version>` (with notary credentials) finishes; the Gatekeeper check on a quarantined copy of the app taken from the DMG reports `accepted` (`spctl -a -vv -t exec`).
 - ☐ Only when the build machine has a local Developer ID Application identity: the DMG is signed, notarized and stapled, and `spctl -a -vv -t install Boreas-<version>.dmg` reports `accepted`. Without that identity the DMG is intentionally unsigned and carries the notarized, stapled app.

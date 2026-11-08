@@ -6,7 +6,7 @@
 #   --skip-notarize  dry run: builds, signs and packs the DMG but does not talk to Apple's notary service.
 #                    The result is NOT distributable (Gatekeeper rejects it).
 #   --publish        after everything passed, creates the GitHub release v<version> with the DMG attached.
-#                    Preflight requires a clean tree, a tag v<version> on HEAD that is also on origin,
+#                    Preflight requires a clean tree, a tag v<version> on HEAD that names the same commit on origin,
 #                    a logged-in gh and no existing release of that name.
 #
 # The DMG is signed, notarized and stapled only when a local "Developer ID Application" identity exists.
@@ -104,7 +104,13 @@ if [ "$PUBLISH" = 1 ]; then
   fi
   TAG_COMMIT=$(git rev-parse -q --verify "v$VERSION^{commit}" 2>/dev/null) || { echo "error: tag v$VERSION does not exist locally" >&2; exit 1; }
   [ "$TAG_COMMIT" = "$(git rev-parse HEAD)" ] || { echo "error: tag v$VERSION does not point at HEAD" >&2; exit 1; }
-  [ -n "$(git ls-remote --tags origin "v$VERSION" 2>/dev/null)" ] || { echo "error: tag v$VERSION is not on origin (push it first)" >&2; exit 1; }
+  # The commit the tag names on origin: the peeled entry (annotated tag) or the plain one (lightweight).
+  REMOTE_REFS=$(git ls-remote origin "refs/tags/v$VERSION" "refs/tags/v$VERSION^{}" 2>/dev/null) || REMOTE_REFS=""
+  REMOTE_COMMIT=$(printf '%s\n' "$REMOTE_REFS" | awk -v t="refs/tags/v$VERSION^{}" '$2 == t { print $1 }')
+  [ -n "$REMOTE_COMMIT" ] || REMOTE_COMMIT=$(printf '%s\n' "$REMOTE_REFS" | awk -v t="refs/tags/v$VERSION" '$2 == t { print $1 }')
+  [ -n "$REMOTE_COMMIT" ] || { echo "error: tag v$VERSION is not on origin (push it first)" >&2; exit 1; }
+  [ "$REMOTE_COMMIT" = "$TAG_COMMIT" ] || {
+    echo "error: tag v$VERSION on origin points at $REMOTE_COMMIT, but locally at $TAG_COMMIT (HEAD)" >&2; exit 1; }
   gh auth status >/dev/null 2>&1 || { echo "error: gh is not logged in (gh auth login)" >&2; exit 1; }
   if gh release view "v$VERSION" >/dev/null 2>&1; then echo "error: release v$VERSION already exists" >&2; exit 1; fi
 fi
