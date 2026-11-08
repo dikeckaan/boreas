@@ -33,6 +33,14 @@ struct MainWindowContent: View {
 
 struct MainWindow: View {
     let model: AppModel
+    @State private var editor: EditorSession?
+
+    /// A copy of Silent, named "New profile".
+    private func newProfile() -> EditorSession {
+        let silent = model.settings.profiles.first { $0.id == BuiltInProfiles.silentID } ?? BuiltInProfiles.all()[1]
+        return EditorSession(profile: CurveEditing.duplicate(silent, name: String(localized: "New profile")),
+                             isNew: true)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,12 +68,20 @@ struct MainWindow: View {
                 .disabled(!model.canControlFans)
                 .help(model.canControlFans ? "" : String(localized: "Fan control needs the helper"))
             }
-            ToolbarItem(placement: .primaryAction) {
-                // The profile editor arrives with Task 9.
-                Button {} label: { Label("New Profile", systemImage: "plus") }
-                    .disabled(true)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    if let p = model.settings.activeProfile {
+                        editor = EditorSession(profile: p, isNew: false)
+                    }
+                } label: { Label("Edit Profile", systemImage: "slider.horizontal.3") }
+                    .disabled(model.settings.activeProfileID == BuiltInProfiles.automaticID)
+                    .help("Edit profile")
+                Button { editor = newProfile() } label: { Label("New Profile", systemImage: "plus") }
                     .help("New profile")
             }
+        }
+        .sheet(item: $editor) { session in
+            ProfileEditor(model: model, session: session)
         }
     }
 }

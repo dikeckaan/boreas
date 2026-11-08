@@ -22,7 +22,10 @@ struct HistoryChart: View {
     private struct Point: Identifiable {
         let id: String
         let date: Date
+        /// Series key (`cpu`, `fanN`, sensor id): one line each.
         let series: String
+        /// Display name for the legend and colour.
+        let label: String
         let y: Double
         let dashed: Bool
     }
@@ -69,9 +72,9 @@ struct HistoryChart: View {
         let prefs = model.settings.sensorPrefs
         let sensors = model.snapshot?.sensors ?? []
         let fanMax = Swift.max(1, model.fans.map(\.max).max() ?? 1)
-        let tempMax = Swift.max(SensorPresentation.value(100, unit: unit), 1)
 
-        // Series in a stable order: cpu, gpu, fans, starred sensors.
+        // Series in a stable order: cpu, gpu, fans, starred sensors. Series are keyed by `cpu`,
+        // `fanN` or the sensor id, so two sensors with the same name stay separate lines.
         let starredIDs = prefs.starred.map(\.rawValue).sorted()
         let names: [String: String] = {
             var n: [String: String] = ["cpu": String(localized: "CPU"), "gpu": String(localized: "GPU")]
@@ -84,21 +87,35 @@ struct HistoryChart: View {
         let fanKeys = Set(model.fans.map { "fan\($0.index)" })
         let isFan: (String) -> Bool = { fanKeys.contains($0) }
 
+        // Legend labels: the display name; a shared name gets the key appended so the legend and
+        // colours stay distinguishable.
+        let nameCounts = Dictionary(present.map { (names[$0] ?? $0, 1) }, uniquingKeysWith: +)
+        let labels: [String: String] = Dictionary(uniqueKeysWithValues: present.map { k in
+            let name = names[k] ?? k
+            return (k, (nameCounts[name] ?? 1) > 1 ? "\(name) (\(k))" : name)
+        })
+
+        // The temperature axis grows with the data: 0 ... max(100, hottest reading + 5), display unit.
+        let observedMax = samples.flatMap { s in
+            present.filter { !isFan($0) }.compactMap { s.values[$0] }
+        }.map { SensorPresentation.value($0, unit: unit) }.max() ?? 0
+        let tempMax = Swift.max(SensorPresentation.value(100, unit: unit), observedMax + 5)
+
         let points: [Point] = samples.flatMap { s in
             present.compactMap { k -> Point? in
                 guard let v = s.values[k] else { return nil }
                 let y = isFan(k) ? v / fanMax * tempMax : SensorPresentation.value(v, unit: unit)
-                return Point(id: "\(k)@\(s.date.timeIntervalSince1970)", date: s.date, series: names[k] ?? k, y: y,
-                             dashed: isFan(k))
+                return Point(id: "\(k)@\(s.date.timeIntervalSince1970)", date: s.date, series: k,
+                             label: labels[k] ?? k, y: y, dashed: isFan(k))
             }
         }
         let palette: [Color] = [.yellow, .green, .blue, .indigo, .pink, .orange, .teal, .purple, .mint]
-        let colorDomain = present.map { names[$0] ?? $0 }
+        let colorDomain = present.map { labels[$0] ?? $0 }
         let colorRange = present.enumerated().map { palette[$0.offset % palette.count] }
 
         Chart(points) { p in
             LineMark(x: .value("Time", p.date), y: .value("Value", p.y), series: .value("Series", p.series))
-                .foregroundStyle(by: .value("Series", p.series))
+                .foregroundStyle(by: .value("Name", p.label))
                 .lineStyle(StrokeStyle(lineWidth: 1.6, dash: p.dashed ? [4, 3] : []))
                 .interpolationMethod(.monotone)
         }

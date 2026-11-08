@@ -247,7 +247,8 @@ final class AppModel {
         if new != helperStatus {
             log.info("helper status: \(String(describing: new), privacy: .public)")
             helperStatus = new
-            if new == .enabled { approvalGuide.close() }
+            // The guide only makes sense while the switch is waiting to be flipped.
+            if new != .requiresApproval { approvalGuide.close() }
             if new != .enabled {
                 client.invalidate()
                 sentGeneration = nil

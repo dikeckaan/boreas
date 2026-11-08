@@ -12,6 +12,7 @@ final class ApprovalGuidePanel {
     func show() {
         if let panel {
             panel.orderFrontRegardless()
+            startPlacement()
             return
         }
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: Self.size),
@@ -29,7 +30,13 @@ final class ApprovalGuidePanel {
         panel.orderFrontRegardless()
         self.panel = panel
 
-        // System Settings needs a moment to put its window up; look for it a few times.
+        startPlacement()
+    }
+
+    /// System Settings needs a moment to put its window up; look for it a few times. Runs on every
+    /// `show()`, so a guide that is shown again follows a window that has moved or just opened.
+    private func startPlacement() {
+        placement?.cancel()
         placement = Task { [weak self] in
             for _ in 0..<6 {
                 try? await Task.sleep(for: .milliseconds(400))
@@ -56,14 +63,18 @@ final class ApprovalGuidePanel {
         return NSPoint(x: x, y: frame.midY - size.height / 2)
     }
 
-    /// Next to the System Settings window, found through the window list (bounds and owner name
+    /// Next to the System Settings window, found through the window list (bounds and owner pid
     /// need no extra permission). nil when it is not on screen or there is no room beside it.
     private static func originNextToSystemSettings() -> NSPoint? {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+        // Matched by process id, not by the (localized) owner name.
+        let pids = Set(NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systemsettings")
+            .map(\.processIdentifier))
+        guard !pids.isEmpty,
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                     kCGNullWindowID) as? [[String: Any]],
               let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
         let candidates = list.compactMap { info -> CGRect? in
-            guard info[kCGWindowOwnerName as String] as? String == "System Settings",
+            guard let pid = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value, pids.contains(pid),
                   (info[kCGWindowLayer as String] as? Int) == 0,
                   let dict = info[kCGWindowBounds as String] as? NSDictionary,
                   let rect = CGRect(dictionaryRepresentation: dict), rect.width > 200 else { return nil }
