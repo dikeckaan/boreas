@@ -8,18 +8,26 @@ struct MainWindowContent: View {
     let model: AppModel
     /// Shows "Ready" for a moment after the helper becomes enabled, before the full window.
     @State private var showReady = false
+    /// False while the window is closed, minimised, covered or on another Space: the live views are
+    /// not built then (see `trackWindowVisibility`).
+    @State private var isVisible = true
 
     var body: some View {
         Group {
             if model.needsOnboarding || showReady {
-                OnboardingView(model: model, ready: showReady && !model.needsOnboarding)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .frame(minWidth: 440)
+                if isVisible {
+                    OnboardingView(model: model, ready: showReady && !model.needsOnboarding)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 440)
+                } else {
+                    Color.clear.frame(minWidth: 440, minHeight: 300)
+                }
             } else {
-                MainWindow(model: model)
+                MainWindow(model: model, isVisible: isVisible)
                     .frame(minWidth: 720, idealWidth: 800, minHeight: 440, idealHeight: 580)
             }
         }
+        .trackWindowVisibility($isVisible)
         .onChange(of: model.needsOnboarding) { was, needed in
             guard was, !needed, model.helperStatus == .enabled else { return }
             showReady = true
@@ -33,6 +41,10 @@ struct MainWindowContent: View {
 
 struct MainWindow: View {
     let model: AppModel
+    /// The live parts (chart, fans, sensors) are only built while the window can be seen. The
+    /// window itself, its toolbar and an open profile editor sheet stay, so nothing is lost when
+    /// another window covers it.
+    let isVisible: Bool
     @State private var editor: EditorSession?
 
     /// A copy of Silent, named "New profile".
@@ -44,14 +56,18 @@ struct MainWindow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HistoryChart(model: model)
-            Divider()
-            HStack(spacing: 0) {
-                FansColumn(model: model)
-                    .frame(minWidth: 300, idealWidth: 330, maxWidth: 400)
+            if isVisible {
+                HistoryChart(model: model)
                 Divider()
-                SensorsColumn(model: model)
-                    .frame(minWidth: 340, maxWidth: .infinity)
+                HStack(spacing: 0) {
+                    FansColumn(model: model)
+                        .frame(minWidth: 300, idealWidth: 330, maxWidth: 400)
+                    Divider()
+                    SensorsColumn(model: model)
+                        .frame(minWidth: 340, maxWidth: .infinity)
+                }
+            } else {
+                Color.clear
             }
         }
         .toolbar {
